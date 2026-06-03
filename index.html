@@ -601,30 +601,42 @@ function defaultState() {
 // ============================================================
 // STORAGE HELPERS
 // ============================================================
+function parseStored(value) {
+  try { return value ? JSON.parse(value) : null; }
+  catch { return null; }
+}
+
 async function getShared(key) {
   try {
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : null;
+    return parseStored(localStorage.getItem(key));
   } catch { return null; }
 }
 async function setShared(key, value) {
-  try { await window.storage.set(key, JSON.stringify(value), true); return true; }
-  catch (e) { console.error("setShared", e); return false; }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    console.error("setShared", e);
+    return false;
+  }
 }
 async function getPersonal(key) {
   try {
-    const r = await window.storage.get(key, false);
-    return r ? JSON.parse(r.value) : null;
+    return parseStored(localStorage.getItem(key));
   } catch { return null; }
 }
 async function setPersonal(key, value) {
-  try { await window.storage.set(key, JSON.stringify(value), false); return true; }
-  catch (e) { console.error("setPersonal", e); return false; }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    console.error("setPersonal", e);
+    return false;
+  }
 }
 async function listShared(prefix) {
   try {
-    const r = await window.storage.list(prefix, true);
-    return r ? r.keys : [];
+    return Object.keys(localStorage).filter(k => k.startsWith(prefix));
   } catch { return []; }
 }
 
@@ -1845,7 +1857,7 @@ function PlayersAdmin({ users, showToast, onRefresh }) {
 
   const doDelete = async () => {
     if (!deleting) return;
-    try { await window.storage.delete("wc26_pred:" + deleting, true); } catch {}
+    localStorage.removeItem("wc26_pred:" + deleting);
     showToast(`Removed ${deleting}`);
     setDeleting(null);
     await onRefresh();
@@ -2274,7 +2286,7 @@ function DangerAdmin({ onRefresh, showToast }) {
   const wipeAll = async () => {
     const keys = await listShared("wc26_");
     for (const k of keys) {
-      try { await window.storage.delete(k, true); } catch {}
+      localStorage.removeItem(k);
     }
     showToast("All data wiped");
     await onRefresh();
