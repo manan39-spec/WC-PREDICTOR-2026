@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>FIFA WC 2026 — Friends Predictor</title>
+<title>PANENKA FIFA26 Edition - The Ultimate World Cup Prediction Challenge</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter+Tight:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700;9..144,900&display=swap" rel="stylesheet">
@@ -314,6 +314,39 @@
     to { transform: translateY(0); opacity: 1; }
   }
 
+  /* === FOOTER === */
+  .app-footer {
+    margin-top: 60px;
+    padding: 28px 0 12px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    color: var(--ink-mute);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    line-height: 1.8;
+  }
+  .app-footer .accent { color: var(--accent); }
+  .app-footer .copyright {
+    margin-top: 6px;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+  }
+  .login-footer {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    color: var(--ink-mute);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1.8;
+  }
+  .login-footer .accent { color: var(--accent); }
+
   .divider {
     height: 1px; background: var(--line); margin: 32px 0;
   }
@@ -576,7 +609,8 @@ function parseStored(value) {
 // ============================================================
 // CONSTANTS
 // ============================================================
-const ADMIN_PASSWORD = "Manan007@!"; // friend who sets it up shares this with no one
+const ADMIN_USERNAME = "MADMIN";
+const ADMIN_PASSWORD = "Manan007!@"; // friend who sets it up shares this with no one
 const GROUP_LETTERS = ["A","B","C","D","E","F","G","H","I","J","K","L"]; // 12 groups for WC2026
 const PHASES = ["setup","group","r32","r16","qf","sf","final","done"];
 const PHASE_LABELS = {
@@ -997,7 +1031,7 @@ function App() {
         <header className="top">
           <div className="brand">
             <div className="brand-mark">PANEN<span className="accent">KA</span></div>
-            <div className="brand-sub">wc26 · friends league</div>
+            <div className="brand-sub">FIFA 26 · The Predictor Club · Road to Glory</div>
           </div>
           <div className="user-pill">
             <span className="dot"></span>
@@ -1019,6 +1053,11 @@ function App() {
         {view==="bonus" && <BonusView state={state} myPred={myPredictions} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
         {view==="leaderboard" && <LeaderboardView state={state} users={users} currentUser={user} />}
         {view==="admin" && <AdminView state={state} users={users} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} showToast={showToast} onRefresh={refreshAll} />}
+
+        <footer className="app-footer">
+          Developed for <span className="accent">FIFA26</span> · By MM
+          <div className="copyright">© {new Date().getFullYear()} PANENKA™ · All Rights Reserved</div>
+        </footer>
       </div>
       {toast && <div className="toast">{toast}</div>}
     </>
@@ -1115,9 +1154,9 @@ function LoginView({ onLogin, remoteAvailable }) {
             </div>
           )}
 
-          {step === "name" && roster?.length > 0 && (
+          {step === "name" && (
             <div className="helper" style={{ marginBottom: 14, lineHeight: 1.5 }}>
-              Use the exact name your admin gave you: {roster.join(', ')}. Edit <code style={{ fontFamily: 'JetBrains Mono', fontSize: 11 }}>data/users.json</code> before deploy to set real names.
+              First time? Pick any username and create a password — that's your account for the league. Logging back in? Use the same username and password you signed up with so your predictions stay tied to you across devices.
             </div>
           )}
 
@@ -1201,6 +1240,11 @@ function LoginView({ onLogin, remoteAvailable }) {
               </div>
             </>
           )}
+
+          <div className="login-footer">
+            Developed for <span className="accent">FIFA26</span> · By MM
+            <div>© {new Date().getFullYear()} PANENKA™ · All Rights Reserved</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1876,7 +1920,16 @@ function LeaderboardView({ state, users, currentUser }) {
 // ADMIN VIEW
 // ============================================================
 function AdminView({ state, users, updateState, isAdmin, setIsAdmin, showToast, onRefresh }) {
+  const [adminUser, setAdminUser] = useState("");
   const [pw, setPw] = useState("");
+
+  const tryLogin = () => {
+    if (adminUser.trim() === ADMIN_USERNAME && pw === ADMIN_PASSWORD) {
+      setIsAdmin(true);
+    } else {
+      showToast("Wrong admin credentials");
+    }
+  };
 
   if (!isAdmin) {
     return (
@@ -1884,13 +1937,17 @@ function AdminView({ state, users, updateState, isAdmin, setIsAdmin, showToast, 
         <div className="card">
           <div className="card-title">Admin access</div>
           <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginBottom: 16 }}>
-            Only the person setting up the league should be admin. The password is set in the code by whoever deployed this — ask them if you need it.
+            Only the person setting up the league should be admin. Credentials are set in the code by whoever deployed this — ask them if you need them.
           </p>
           <div className="field">
-            <label>Password</label>
-            <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter" && (pw === ADMIN_PASSWORD ? setIsAdmin(true) : showToast("Wrong password"))} />
+            <label>Admin username</label>
+            <input type="text" value={adminUser} onChange={e=>setAdminUser(e.target.value)} placeholder="Admin username" autoFocus onKeyDown={e=>e.key==="Enter" && tryLogin()} />
           </div>
-          <button className="btn btn-primary" onClick={() => pw === ADMIN_PASSWORD ? setIsAdmin(true) : showToast("Wrong password")}>Unlock admin</button>
+          <div className="field">
+            <label>Password</label>
+            <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter" && tryLogin()} />
+          </div>
+          <button className="btn btn-primary" onClick={tryLogin}>Unlock admin</button>
         </div>
       </div>
     );
