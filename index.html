@@ -470,56 +470,40 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
-
 <script type="text/babel">
 const { useState, useEffect, useMemo, useCallback } = React;
 
 // ============================================================
-// FIREBASE CONFIGURATION
+// SHARED JSON STORE (Vercel /api/store — all devices sync here)
 // ============================================================
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyB4knal9Dy-SAAPJfBRyMiuEWTVIXaq7_c",
-  authDomain: "panenka-wc26.firebaseapp.com",
-  databaseURL: "https://panenka-wc26-default-rtdb.firebaseio.com",
-  projectId: "panenka-wc26",
-  storageBucket: "panenka-wc26.firebasestorage.app",
-  messagingSenderId: "1076035081044",
-  appId: "1:1076035081044:web:0f6a9108a070d45747eec1"
-};
-const FIREBASE_DATABASE_ROOT = "wc26";
-let firebaseReady = false;
-let firebaseDb = null;
+const API_STORE = '/api/store';
+const SYNC_POLL_MS = 30000;
+let apiReady = false;
 
-function encodeKey(key) {
-  return encodeURIComponent(key);
-}
-
-async function initFirebase() {
-  if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.includes("YOUR_API_KEY")) {
-    console.warn("Firebase config is not set. Remote storage will be disabled.");
-    return false;
-  }
+async function initApi() {
   try {
-    if (!firebase.apps.length) {
-      firebase.initializeApp(FIREBASE_CONFIG);
+    const res = await fetch(`${API_STORE}?health=1`);
+    if (!res.ok) {
+      apiReady = false;
+      return false;
     }
-    firebaseDb = firebase.database();
-    firebaseReady = true;
-    return true;
+    const data = await res.json();
+    apiReady = !!data.ok;
+    return apiReady;
   } catch (error) {
-    console.warn("Firebase initialization failed:", error);
-    firebaseReady = false;
+    console.warn('Shared store API unavailable:', error);
+    apiReady = false;
     return false;
   }
 }
 
 async function remoteGet(key) {
-  if (!firebaseReady) return null;
+  if (!apiReady) return null;
   try {
-    const snap = await firebaseDb.ref(`${FIREBASE_DATABASE_ROOT}/${encodeKey(key)}`).once('value');
-    return snap.exists() ? snap.val() : null;
+    const res = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.value ?? null;
   } catch (error) {
     console.warn('remoteGet failed', error);
     return null;
@@ -527,10 +511,14 @@ async function remoteGet(key) {
 }
 
 async function remoteSet(key, value) {
-  if (!firebaseReady) return false;
+  if (!apiReady) return false;
   try {
-    await firebaseDb.ref(`${FIREBASE_DATABASE_ROOT}/${encodeKey(key)}`).set(value);
-    return true;
+    const res = await fetch(API_STORE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+    return res.ok;
   } catch (error) {
     console.warn('remoteSet failed', error);
     return false;
@@ -538,15 +526,45 @@ async function remoteSet(key, value) {
 }
 
 async function remoteList(prefix) {
-  if (!firebaseReady) return [];
+  if (!apiReady) return [];
   try {
-    const snap = await firebaseDb.ref(FIREBASE_DATABASE_ROOT).once('value');
-    const val = snap.val();
-    if (!val || typeof val !== 'object') return [];
-    return Object.keys(val).map(decodeURIComponent).filter(k => k.startsWith(prefix));
+    const res = await fetch(`${API_STORE}?prefix=${encodeURIComponent(prefix)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.keys) ? data.keys : [];
   } catch (error) {
     console.warn('remoteList failed', error);
     return [];
+  }
+}
+
+async function remoteDeleteKeys(keys) {
+  if (!apiReady || !keys.length) return false;
+  try {
+    const res = await fetch(API_STORE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', keys })
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('remoteDeleteKeys failed', error);
+    return false;
+  }
+}
+
+async function remoteWipePrefix(prefix) {
+  if (!apiReady) return false;
+  try {
+    const res = await fetch(API_STORE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'wipe', prefix })
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('remoteWipePrefix failed', error);
+    return false;
   }
 }
 
@@ -684,9 +702,12 @@ function defaultState() {
 // ============================================================
 
 async function getShared(key) {
-  if (firebaseReady) {
+  if (apiReady) {
     const remoteValue = await remoteGet(key);
-    if (remoteValue !== null) return remoteValue;
+    if (remoteValue !== null) {
+      try { localStorage.setItem(key, JSON.stringify(remoteValue)); } catch {}
+      return remoteValue;
+    }
   }
   try {
     return parseStored(localStorage.getItem(key));
@@ -703,7 +724,7 @@ async function setShared(key, value) {
   } catch (e) {
     console.error("setShared local", e);
   }
-  if (firebaseReady) {
+  if (apiReady) {
     await remoteSet(key, value);
   }
   return savedLocal;
@@ -728,7 +749,7 @@ async function setPersonal(key, value) {
 }
 
 async function listShared(prefix) {
-  if (firebaseReady) {
+  if (apiReady) {
     const remoteKeys = await remoteList(prefix);
     if (remoteKeys.length) return remoteKeys;
   }
@@ -852,18 +873,6 @@ function App() {
     setTimeout(() => setToast(null), 2400);
   }, []);
 
-  // Initial load
-  useEffect(() => {
-    (async () => {
-      const savedUser = await getPersonal("current_user");
-      if (savedUser) setUser(savedUser);
-      const remoteReady = await initFirebase();
-      setRemoteAvailable(remoteReady);
-      await refreshAll();
-      setLoading(false);
-    })();
-  }, []);
-
   const refreshAll = useCallback(async () => {
     let s = await getShared("wc26_state");
     if (!s) {
@@ -911,6 +920,23 @@ function App() {
     }
     setUsers(all);
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const savedUser = await getPersonal("current_user");
+      if (savedUser) setUser(savedUser);
+      const remoteReady = await initApi();
+      setRemoteAvailable(remoteReady);
+      await refreshAll();
+      setLoading(false);
+    })();
+  }, [refreshAll]);
+
+  useEffect(() => {
+    if (!remoteAvailable) return;
+    const id = setInterval(() => refreshAll(), SYNC_POLL_MS);
+    return () => clearInterval(id);
+  }, [remoteAvailable, refreshAll]);
 
   const login = useCallback(async (name) => {
     const cleanName = name.trim();
@@ -1009,6 +1035,14 @@ function LoginView({ onLogin, remoteAvailable }) {
   const [pw2, setPw2] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [roster, setRoster] = useState(null);
+
+  useEffect(() => {
+    fetch('/data/users.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => data?.players?.length && setRoster(data.players.map(p => p.displayName)))
+      .catch(() => {});
+  }, []);
 
   const cleanName = name.trim();
 
@@ -1077,7 +1111,13 @@ function LoginView({ onLogin, remoteAvailable }) {
           </p>
           {!remoteAvailable && (
             <div className="lock-banner" style={{ borderColor: 'rgba(255,59,48,0.3)', color: 'var(--red)', marginBottom: 16 }}>
-              ⚠️ Remote storage is not configured. Predictions will only work on the current device until Firebase is enabled.
+              ⚠️ Shared storage is offline. Predictions only save on this device until /api/store works with Upstash Redis linked in Vercel (see DEPLOYMENT_GUIDE.md).
+            </div>
+          )}
+
+          {step === "name" && roster?.length > 0 && (
+            <div className="helper" style={{ marginBottom: 14, lineHeight: 1.5 }}>
+              Use the exact name your admin gave you: {roster.join(', ')}. Edit <code style={{ fontFamily: 'JetBrains Mono', fontSize: 11 }}>data/users.json</code> before deploy to set real names.
             </div>
           )}
 
@@ -1964,7 +2004,9 @@ function PlayersAdmin({ users, showToast, onRefresh }) {
 
   const doDelete = async () => {
     if (!deleting) return;
-    localStorage.removeItem("wc26_pred:" + deleting);
+    const key = "wc26_pred:" + deleting;
+    await remoteDeleteKeys([key]);
+    localStorage.removeItem(key);
     showToast(`Removed ${deleting}`);
     setDeleting(null);
     await onRefresh();
@@ -2391,10 +2433,12 @@ function DangerAdmin({ onRefresh, showToast }) {
   const [confirm, setConfirm] = useState(false);
 
   const wipeAll = async () => {
+    await remoteWipePrefix("wc26_");
     const keys = await listShared("wc26_");
     for (const k of keys) {
       localStorage.removeItem(k);
     }
+    Object.keys(localStorage).filter(k => k.startsWith("wc26_")).forEach(k => localStorage.removeItem(k));
     showToast("All data wiped");
     await onRefresh();
     setConfirm(false);
