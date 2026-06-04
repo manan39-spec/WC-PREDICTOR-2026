@@ -1,0 +1,2472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FIFA WC 2026 — Friends Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter+Tight:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700;9..144,900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e0a;
+    --bg-2: #11140f;
+    --card: #161a13;
+    --card-2: #1d2118;
+    --line: #2a2f24;
+    --line-bright: #3a4030;
+    --ink: #f1ecdc;
+    --ink-dim: #b6b09a;
+    --ink-mute: #6f6a58;
+    --accent: #ff5e1f;
+    --accent-2: #ffb84a;
+    --green: #2fc26a;
+    --red: #ff3b30;
+    --blue: #4fb3ff;
+    --yellow: #ffcc00;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); font-family: 'Inter Tight', sans-serif; min-height: 100vh; }
+  body {
+    background-image:
+      radial-gradient(1200px 600px at 90% -10%, rgba(255,94,31,0.08), transparent 60%),
+      radial-gradient(800px 400px at -10% 110%, rgba(47,194,106,0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, select { font-family: inherit; }
+  a { color: var(--accent-2); }
+
+  /* === LAYOUT === */
+  .app { max-width: 1280px; margin: 0 auto; padding: 0 24px 80px; }
+  .top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 0 18px; border-bottom: 1px solid var(--line); margin-bottom: 28px;
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+  }
+  .brand { display: flex; align-items: baseline; gap: 12px; }
+  .brand-mark {
+    font-family: 'Anton', sans-serif; letter-spacing: 0.02em;
+    font-size: 28px; line-height: 1; color: var(--ink);
+  }
+  .brand-mark .accent { color: var(--accent); }
+  .brand-sub {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ink-mute); text-transform: uppercase; letter-spacing: 0.15em;
+  }
+  .user-pill {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+    font-size: 13px;
+  }
+  .user-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .user-pill button { font-size: 12px; color: var(--ink-mute); padding: 0 0 0 8px; border-left: 1px solid var(--line); }
+  .user-pill button:hover { color: var(--accent); }
+
+  /* === NAV === */
+  .nav { display: flex; gap: 0; border-bottom: 1px solid var(--line); margin-bottom: 32px; overflow-x: auto; }
+  .nav button {
+    font-family: 'Anton', sans-serif; font-size: 18px; letter-spacing: 0.04em;
+    padding: 14px 22px 16px; color: var(--ink-mute);
+    border-bottom: 3px solid transparent; transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .nav button:hover { color: var(--ink); }
+  .nav button.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  /* === HERO / HEADER === */
+  .page-head { margin-bottom: 36px; }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .page-title {
+    font-family: 'Anton', sans-serif; font-size: clamp(40px, 7vw, 88px);
+    line-height: 0.92; letter-spacing: -0.01em; text-transform: uppercase;
+  }
+  .page-title .it { font-family: 'Fraunces', serif; font-weight: 400; font-style: italic; font-size: 0.82em; letter-spacing: -0.02em; }
+  .page-sub { color: var(--ink-dim); font-size: 16px; max-width: 720px; margin-top: 14px; line-height: 1.55; }
+
+  /* === CARDS === */
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 4px;
+    padding: 24px;
+  }
+  .card-title {
+    font-family: 'Anton', sans-serif; font-size: 22px; letter-spacing: 0.04em;
+    text-transform: uppercase; margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .grid { display: grid; gap: 18px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+  /* === BUTTONS === */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 18px; border-radius: 3px; font-size: 13px;
+    font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    transition: all 0.15s; border: 1px solid var(--line-bright);
+    background: var(--card-2); color: var(--ink);
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn-primary {
+    background: var(--accent); color: #1a0f06; border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+  .btn-ghost { background: transparent; border-color: var(--line); }
+  .btn-danger { background: transparent; border-color: rgba(255,59,48,0.4); color: var(--red); }
+  .btn-danger:hover { background: rgba(255,59,48,0.1); }
+  .btn-sm { padding: 7px 12px; font-size: 11px; }
+
+  /* === FORMS === */
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.15em; text-transform: uppercase;
+  }
+  .field input, .field select {
+    background: var(--bg-2); border: 1px solid var(--line); color: var(--ink);
+    padding: 11px 14px; font-size: 14px; border-radius: 2px;
+    outline: none; transition: border 0.15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field input:disabled, .field select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* === LOGIN === */
+  .login-wrap {
+    min-height: 80vh; display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    max-width: 480px; width: 100%; padding: 48px 40px;
+    border: 1px solid var(--line); background: var(--card);
+    position: relative;
+  }
+  .login-card::before {
+    content: ''; position: absolute; top: -1px; left: -1px; right: -1px; height: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+  .login-title { font-family: 'Anton', sans-serif; font-size: 56px; line-height: 0.9; letter-spacing: 0; text-transform: uppercase; margin-bottom: 8px; }
+  .login-title .it { font-family: 'Fraunces', serif; font-style: italic; font-weight: 400; color: var(--accent); }
+  .login-sub { color: var(--ink-dim); margin-bottom: 32px; font-size: 14px; line-height: 1.5; }
+
+  /* === HOME PAGE === */
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 32px; }
+  .stat {
+    background: var(--card); padding: 22px 20px;
+  }
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.18em; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .stat-value {
+    font-family: 'Anton', sans-serif; font-size: 44px; line-height: 1;
+    letter-spacing: 0.02em;
+  }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.green { color: var(--green); }
+  .stat-sub { font-size: 12px; color: var(--ink-dim); margin-top: 6px; }
+
+  /* === SCORING RULES === */
+  .rules-list { list-style: none; }
+  .rules-list li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 0; border-bottom: 1px dashed var(--line); gap: 16px;
+  }
+  .rules-list li:last-child { border-bottom: none; }
+  .rule-name { font-size: 14px; color: var(--ink); }
+  .rule-points {
+    font-family: 'Anton', sans-serif; font-size: 28px; color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+  .rule-points small { font-family: 'Inter Tight'; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; margin-left: 4px; }
+
+  /* === PREDICTIONS === */
+  .group-card { padding: 18px; }
+  .group-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  }
+  .group-letter { font-family: 'Anton', sans-serif; font-size: 24px; letter-spacing: 0.04em; }
+  .group-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.15em; text-transform: uppercase; }
+  .team-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; gap: 12px; font-size: 13px;
+  }
+  .team-radio {
+    width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line-bright);
+    flex-shrink: 0; position: relative; cursor: pointer;
+  }
+  .team-radio.checked { border-color: var(--accent); background: var(--accent); }
+  .team-radio.checked::after {
+    content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--bg);
+  }
+  .team-radio.correct { background: var(--green); border-color: var(--green); }
+  .team-radio.wrong { background: var(--red); border-color: var(--red); }
+  .team-name { flex: 1; }
+  .team-row.faded { opacity: 0.4; }
+  .team-row.locked { cursor: not-allowed; }
+
+  /* === KNOCKOUT === */
+  .match-card { background: var(--card); border: 1px solid var(--line); padding: 18px; }
+  .match-num { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-mute); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 10px; }
+  .match-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .team-pick {
+    padding: 12px; border: 1px solid var(--line); border-radius: 2px;
+    text-align: center; font-weight: 500; transition: all 0.15s; cursor: pointer;
+    font-size: 14px;
+  }
+  .team-pick:hover { border-color: var(--ink-dim); }
+  .team-pick.selected { border-color: var(--accent); background: rgba(255,94,31,0.08); color: var(--accent); }
+  .team-pick.correct-pick { border-color: var(--green); background: rgba(47,194,106,0.1); color: var(--green); }
+  .team-pick.wrong-pick { border-color: var(--red); background: rgba(255,59,48,0.08); color: var(--red); opacity: 0.7; }
+  .team-pick.actual-winner { border-color: var(--green); }
+  .score-row { display: flex; align-items: center; gap: 8px; justify-content: center; margin-top: 4px; }
+  .score-row input { width: 56px; text-align: center; font-family: 'JetBrains Mono'; font-size: 18px; font-weight: 700; padding: 8px 4px; }
+  .score-dash { color: var(--ink-mute); font-family: 'JetBrains Mono'; font-weight: 700; }
+  .match-result-strip {
+    margin-top: 10px; padding: 8px 12px; background: var(--bg-2);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--ink-dim); letter-spacing: 0.05em;
+    display: flex; justify-content: space-between;
+  }
+  .pts-badge { color: var(--accent); font-weight: 700; }
+
+  /* === LEADERBOARD === */
+  .lb-table { width: 100%; border-collapse: collapse; }
+  .lb-table th, .lb-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); }
+  .lb-table th {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.15em; text-transform: uppercase;
+    font-weight: 500;
+  }
+  .lb-table td { font-size: 14px; }
+  .lb-table tr:hover td { background: var(--card-2); }
+  .lb-rank { font-family: 'Anton', sans-serif; font-size: 22px; letter-spacing: 0.04em; width: 60px; }
+  .lb-rank.gold { color: var(--accent-2); }
+  .lb-rank.silver { color: #cfd0d4; }
+  .lb-rank.bronze { color: #d4824a; }
+  .lb-total { font-family: 'Anton', sans-serif; font-size: 26px; color: var(--accent); letter-spacing: 0.02em; text-align: right; }
+  .lb-breakdown { display: flex; gap: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-mute); flex-wrap: wrap; }
+  .lb-breakdown span { background: var(--bg-2); padding: 3px 8px; border: 1px solid var(--line); }
+  .lb-breakdown span strong { color: var(--ink); font-weight: 700; margin-left: 4px; }
+
+  /* === BONUS QUESTIONS === */
+  .bonus-card { padding: 22px; margin-bottom: 16px; }
+  .bonus-q {
+    font-family: 'Fraunces', serif; font-size: 22px; font-weight: 500;
+    line-height: 1.3; margin-bottom: 16px;
+  }
+  .bonus-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .bonus-opt {
+    padding: 12px 14px; border: 1px solid var(--line); cursor: pointer;
+    font-size: 13px; transition: all 0.15s; text-align: center;
+    background: var(--bg-2);
+  }
+  .bonus-opt:hover { border-color: var(--ink-dim); }
+  .bonus-opt.selected { border-color: var(--accent); background: rgba(255,94,31,0.08); color: var(--accent); }
+  .bonus-opt.correct { border-color: var(--green); background: rgba(47,194,106,0.1); color: var(--green); }
+  .bonus-opt.wrong { border-color: var(--red); opacity: 0.7; color: var(--red); }
+  .bonus-text-in {
+    width: 100%; padding: 12px 14px; background: var(--bg-2);
+    border: 1px solid var(--line); color: var(--ink); font-size: 14px; outline: none;
+  }
+  .bonus-text-in:focus { border-color: var(--accent); }
+
+  /* === ADMIN === */
+  .admin-section { margin-bottom: 28px; }
+  .admin-section h3 {
+    font-family: 'Anton', sans-serif; font-size: 20px; letter-spacing: 0.04em;
+    text-transform: uppercase; margin-bottom: 14px; color: var(--accent-2);
+  }
+  .group-edit { background: var(--bg-2); padding: 14px; margin-bottom: 8px; }
+  .group-edit-head { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .group-edit-head strong { font-family: 'Anton'; font-size: 18px; letter-spacing: 0.04em; min-width: 30px; }
+  .group-edit-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+  .group-edit-row input { font-size: 13px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); color: var(--ink); outline: none; }
+  .group-edit-row input:focus { border-color: var(--accent); }
+
+  .phase-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-dim);
+  }
+  .phase-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  /* === MISC === */
+  .empty {
+    padding: 60px 30px; text-align: center; color: var(--ink-mute);
+    border: 1px dashed var(--line);
+  }
+  .empty-title { font-family: 'Anton', sans-serif; font-size: 28px; color: var(--ink-dim); margin-bottom: 8px; letter-spacing: 0.04em; }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--card); border: 1px solid var(--accent);
+    padding: 14px 20px; font-size: 13px; z-index: 100;
+    animation: slideUp 0.2s ease-out;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .divider {
+    height: 1px; background: var(--line); margin: 32px 0;
+  }
+  .helper {
+    font-size: 12px; color: var(--ink-mute); margin-top: 6px; line-height: 1.5;
+  }
+  .lock-banner {
+    background: rgba(255,94,31,0.08); border: 1px solid rgba(255,94,31,0.3);
+    padding: 14px 18px; margin-bottom: 24px; font-size: 13px; color: var(--accent-2);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .checked-icon, .lock-icon { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* === COUNTDOWN === */
+  .countdown-row {
+    background: linear-gradient(135deg, rgba(255,94,31,0.08), rgba(255,184,74,0.04));
+    border: 1px solid rgba(255,94,31,0.25);
+    padding: 28px 32px; margin-bottom: 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    position: relative; overflow: hidden;
+  }
+  .countdown-row::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(600px 200px at 100% 0%, rgba(255,94,31,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .countdown-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .countdown-where {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.15em; text-transform: uppercase;
+    margin-top: 6px;
+  }
+  .countdown-numbers { display: flex; align-items: flex-end; gap: 6px; position: relative; }
+  .cd-unit { display: flex; flex-direction: column; align-items: center; min-width: 56px; }
+  .cd-val {
+    font-family: 'Anton', sans-serif; font-size: clamp(40px, 6vw, 64px);
+    line-height: 0.9; color: var(--ink); letter-spacing: 0.02em;
+  }
+  .cd-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    color: var(--ink-mute); letter-spacing: 0.18em; margin-top: 4px;
+  }
+  .cd-sep {
+    font-family: 'Anton', sans-serif; font-size: clamp(36px, 5vw, 56px);
+    color: var(--accent); align-self: flex-start; line-height: 0.9; margin-top: 6px;
+    animation: blink 1.2s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.25;} }
+  .countdown-row.live { background: linear-gradient(135deg, rgba(47,194,106,0.10), rgba(47,194,106,0.02)); border-color: rgba(47,194,106,0.35); }
+  .countdown-row.live .countdown-label { color: var(--green); }
+
+  /* === PHASE TIMELINE === */
+  .phase-timeline {
+    display: flex; align-items: center; padding: 20px 8px; margin-bottom: 32px;
+    background: var(--card); border: 1px solid var(--line); overflow-x: auto;
+  }
+  .phase-node { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 80px; flex-shrink: 0; }
+  .phase-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--line-bright); background: var(--bg);
+    position: relative; transition: all 0.2s;
+  }
+  .phase-node.done .phase-dot { background: var(--green); border-color: var(--green); }
+  .phase-node.current .phase-dot {
+    background: var(--accent); border-color: var(--accent);
+    box-shadow: 0 0 0 4px rgba(255,94,31,0.2);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%,100%{ box-shadow: 0 0 0 4px rgba(255,94,31,0.2); }
+    50%{ box-shadow: 0 0 0 8px rgba(255,94,31,0.05); }
+  }
+  .phase-name {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.12em; text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .phase-node.done .phase-name { color: var(--ink-dim); }
+  .phase-node.current .phase-name { color: var(--accent); font-weight: 700; }
+  .phase-line {
+    height: 2px; flex: 1; min-width: 20px; background: var(--line-bright);
+    margin: 0 -8px; margin-top: -22px;
+  }
+  .phase-line.done { background: var(--green); }
+
+  /* === CTA CARD === */
+  .cta-card {
+    background: var(--card); border: 1px solid var(--accent);
+    padding: 22px 28px; margin-bottom: 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    position: relative; overflow: hidden;
+  }
+  .cta-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: var(--accent);
+  }
+  .cta-eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--accent); letter-spacing: 0.2em; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .cta-title {
+    font-family: 'Anton', sans-serif; font-size: 22px; letter-spacing: 0.03em;
+    text-transform: uppercase; line-height: 1.1;
+  }
+  .cta-sub { font-size: 12px; color: var(--ink-dim); margin-top: 4px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; }
+
+  /* === PODIUM === */
+  .podium { display: flex; flex-direction: column; }
+  .podium-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 0; border-bottom: 1px dashed var(--line);
+  }
+  .podium-row:last-child { border-bottom: none; }
+  .podium-rank {
+    font-family: 'Anton', sans-serif; font-size: 26px; min-width: 36px;
+    letter-spacing: 0.04em; color: var(--ink-mute);
+  }
+  .podium-rank.gold { color: var(--accent-2); }
+  .podium-rank.silver { color: #cfd0d4; }
+  .podium-rank.bronze { color: #d4824a; }
+  .podium-name { flex: 1; font-size: 15px; font-weight: 500; }
+  .podium-pts {
+    font-family: 'Anton', sans-serif; font-size: 22px; color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+  .empty-mini { padding: 24px; text-align: center; color: var(--ink-mute); font-size: 13px; }
+
+  .rules-list.compact li { padding: 10px 0; }
+
+  @media (max-width: 720px) {
+    .countdown-row { flex-direction: column; align-items: flex-start; padding: 20px; }
+    .countdown-numbers { width: 100%; justify-content: space-between; }
+    .cta-card { flex-direction: column; align-items: flex-start; }
+  }
+
+  @media (max-width: 640px) {
+    .app { padding: 0 16px 60px; }
+    .top { padding: 16px 0 12px; }
+    .login-card { padding: 32px 24px; }
+    .login-title { font-size: 42px; }
+    .nav button { font-size: 14px; padding: 12px 14px; }
+    .group-edit-row { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ============================================================
+// SHARED JSON STORE (Vercel /api/store — all devices sync here)
+// ============================================================
+const API_STORE = '/api/store';
+const SYNC_POLL_MS = 30000;
+let apiReady = false;
+
+async function initApi() {
+  try {
+    const res = await fetch(`${API_STORE}?health=1`);
+    if (!res.ok) {
+      apiReady = false;
+      return false;
+    }
+    const data = await res.json();
+    apiReady = !!data.ok;
+    return apiReady;
+  } catch (error) {
+    console.warn('Shared store API unavailable:', error);
+    apiReady = false;
+    return false;
+  }
+}
+
+async function remoteGet(key) {
+  if (!apiReady) return null;
+  try {
+    const res = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.value ?? null;
+  } catch (error) {
+    console.warn('remoteGet failed', error);
+    return null;
+  }
+}
+
+async function remoteSet(key, value) {
+  if (!apiReady) return false;
+  try {
+    const res = await fetch(API_STORE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('remoteSet failed', error);
+    return false;
+  }
+}
+
+async function remoteList(prefix) {
+  if (!apiReady) return [];
+  try {
+    const res = await fetch(`${API_STORE}?prefix=${encodeURIComponent(prefix)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.keys) ? data.keys : [];
+  } catch (error) {
+    console.warn('remoteList failed', error);
+    return [];
+  }
+}
+
+async function remoteDeleteKeys(keys) {
+  if (!apiReady || !keys.length) return false;
+  try {
+    const res = await fetch(API_STORE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', keys })
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('remoteDeleteKeys failed', error);
+    return false;
+  }
+}
+
+async function remoteWipePrefix(prefix) {
+  if (!apiReady) return false;
+  try {
+    const res = await fetch(API_STORE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'wipe', prefix })
+    });
+    return res.ok;
+  } catch (error) {
+    console.warn('remoteWipePrefix failed', error);
+    return false;
+  }
+}
+
+function parseStored(value) {
+  try { return value ? JSON.parse(value) : null; }
+  catch { return null; }
+}
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const ADMIN_PASSWORD = "Manan007@!"; // friend who sets it up shares this with no one
+const GROUP_LETTERS = ["A","B","C","D","E","F","G","H","I","J","K","L"]; // 12 groups for WC2026
+const PHASES = ["setup","group","r32","r16","qf","sf","final","done"];
+const PHASE_LABELS = {
+  setup: "Setup",
+  group: "Group Stage",
+  r32: "Round of 32",
+  r16: "Round of 16",
+  qf: "Quarter-finals",
+  sf: "Semi-finals",
+  final: "Final",
+  done: "Tournament Over"
+};
+const KO_ROUNDS = ["r32","r16","qf","sf","final"];
+
+const DEFAULT_SCORING = {
+  groupWinner: 1,
+  thirdPlaced: 1,
+  r32: 2,
+  r16: 3,
+  r16Score: 3,
+  qf: 3,
+  qfScore: 3,
+  sf: 3,
+  sfScore: 3,
+  final: 3,
+  finalScore: 3,
+  bonus: 4
+};
+
+// Official FIFA WC2026 draw — verified from FIFA group tables.
+function defaultGroups() {
+  return {
+    A: ["Mexico", "South Africa", "South Korea", "Czech Republic"],
+    B: ["Canada", "Bosnia and Herzegovina", "Qatar", "Switzerland"],
+    C: ["Brazil", "Morocco", "Haiti", "Scotland"],
+    D: ["United States", "Paraguay", "Australia", "Turkey"],
+    E: ["Germany", "Curaçao", "Ivory Coast", "Ecuador"],
+    F: ["Netherlands", "Japan", "Sweden", "Tunisia"],
+    G: ["Belgium", "Egypt", "Iran", "New Zealand"],
+    H: ["Spain", "Cape Verde", "Saudi Arabia", "Uruguay"],
+    I: ["France", "Senegal", "Iraq", "Norway"],
+    J: ["Argentina", "Algeria", "Austria", "Jordan"],
+    K: ["Portugal", "DR Congo", "Uzbekistan", "Colombia"],
+    L: ["England", "Croatia", "Ghana", "Panama"]
+  };
+}
+
+const BRACKET_VERSION = 3; // bump to force fixture regeneration on existing state
+
+function bracketTemplate() {
+  // === Official FIFA WC2026 bracket structure ===
+  // R32 = Matches 73-88, R16 = 89-96, QF = 97-100, SF = 101-102
+  // Bronze final = M103, Final = M104
+  const r32 = [
+    { id: "r32_m73", num: 73, team1: "2A", team2: "2B", venue: "SoFi Stadium, Inglewood", date: "Sun 28 Jun" },
+    { id: "r32_m74", num: 74, team1: "1E", team2: "3 of A/B/C/D/F", venue: "Gillette Stadium, Foxborough", date: "Mon 29 Jun" },
+    { id: "r32_m75", num: 75, team1: "1F", team2: "2C", venue: "Estadio BBVA, Guadalupe", date: "Mon 29 Jun" },
+    { id: "r32_m76", num: 76, team1: "1C", team2: "2F", venue: "NRG Stadium, Houston", date: "Mon 29 Jun" },
+    { id: "r32_m77", num: 77, team1: "1I", team2: "3 of C/D/F/G/H", venue: "MetLife Stadium, East Rutherford", date: "Tue 30 Jun" },
+    { id: "r32_m78", num: 78, team1: "2E", team2: "2I", venue: "AT&T Stadium, Arlington", date: "Tue 30 Jun" },
+    { id: "r32_m79", num: 79, team1: "1A", team2: "3 of C/E/F/H/I", venue: "Estadio Azteca, Mexico City", date: "Tue 30 Jun" },
+    { id: "r32_m80", num: 80, team1: "1L", team2: "3 of E/H/I/J/K", venue: "Mercedes-Benz Stadium, Atlanta", date: "Wed 1 Jul" },
+    { id: "r32_m81", num: 81, team1: "1D", team2: "3 of B/E/F/I/J", venue: "Levi's Stadium, Santa Clara", date: "Wed 1 Jul" },
+    { id: "r32_m82", num: 82, team1: "1G", team2: "3 of A/E/H/I/J", venue: "Lumen Field, Seattle", date: "Wed 1 Jul" },
+    { id: "r32_m83", num: 83, team1: "2K", team2: "2L", venue: "BMO Field, Toronto", date: "Thu 2 Jul" },
+    { id: "r32_m84", num: 84, team1: "1H", team2: "2J", venue: "SoFi Stadium, Inglewood", date: "Thu 2 Jul" },
+    { id: "r32_m85", num: 85, team1: "1B", team2: "3 of E/F/G/I/J", venue: "BC Place, Vancouver", date: "Thu 2 Jul" },
+    { id: "r32_m86", num: 86, team1: "1J", team2: "2H", venue: "Hard Rock Stadium, Miami Gardens", date: "Fri 3 Jul" },
+    { id: "r32_m87", num: 87, team1: "1K", team2: "3 of D/E/I/J/L", venue: "Arrowhead Stadium, Kansas City", date: "Fri 3 Jul" },
+    { id: "r32_m88", num: 88, team1: "2D", team2: "2G", venue: "AT&T Stadium, Arlington", date: "Fri 3 Jul" }
+  ];
+  const r16 = [
+    { id: "r16_m89", num: 89, team1: "Winner M74", team2: "Winner M77", venue: "Lincoln Financial Field, Philadelphia", date: "Sat 4 Jul" },
+    { id: "r16_m90", num: 90, team1: "Winner M73", team2: "Winner M75", venue: "NRG Stadium, Houston", date: "Sat 4 Jul" },
+    { id: "r16_m91", num: 91, team1: "Winner M76", team2: "Winner M78", venue: "MetLife Stadium, East Rutherford", date: "Sun 5 Jul" },
+    { id: "r16_m92", num: 92, team1: "Winner M79", team2: "Winner M80", venue: "Estadio Azteca, Mexico City", date: "Sun 5 Jul" },
+    { id: "r16_m93", num: 93, team1: "Winner M83", team2: "Winner M84", venue: "AT&T Stadium, Arlington", date: "Mon 6 Jul" },
+    { id: "r16_m94", num: 94, team1: "Winner M81", team2: "Winner M82", venue: "Lumen Field, Seattle", date: "Mon 6 Jul" },
+    { id: "r16_m95", num: 95, team1: "Winner M86", team2: "Winner M88", venue: "Mercedes-Benz Stadium, Atlanta", date: "Tue 7 Jul" },
+    { id: "r16_m96", num: 96, team1: "Winner M85", team2: "Winner M87", venue: "BC Place, Vancouver", date: "Tue 7 Jul" }
+  ];
+  const qf = [
+    { id: "qf_m97",  num: 97,  team1: "Winner M89", team2: "Winner M90", venue: "Gillette Stadium, Foxborough", date: "Thu 9 Jul" },
+    { id: "qf_m98",  num: 98,  team1: "Winner M93", team2: "Winner M94", venue: "SoFi Stadium, Inglewood", date: "Fri 10 Jul" },
+    { id: "qf_m99",  num: 99,  team1: "Winner M91", team2: "Winner M92", venue: "Hard Rock Stadium, Miami Gardens", date: "Sat 11 Jul" },
+    { id: "qf_m100", num: 100, team1: "Winner M95", team2: "Winner M96", venue: "Arrowhead Stadium, Kansas City", date: "Sat 11 Jul" }
+  ];
+  const sf = [
+    { id: "sf_m101", num: 101, team1: "Winner M97", team2: "Winner M98", venue: "AT&T Stadium, Arlington", date: "Tue 14 Jul" },
+    { id: "sf_m102", num: 102, team1: "Winner M99", team2: "Winner M100", venue: "Mercedes-Benz Stadium, Atlanta", date: "Wed 15 Jul" }
+  ];
+  // Final round includes both Bronze (M103) and Final (M104) — both predictable
+  const final = [
+    { id: "bronze_m103", num: 103, team1: "Loser M101", team2: "Loser M102", venue: "Hard Rock Stadium, Miami Gardens", date: "Sat 18 Jul", label: "BRONZE FINAL" },
+    { id: "final_m104", num: 104, team1: "Winner M101", team2: "Winner M102", venue: "MetLife Stadium, East Rutherford", date: "Sun 19 Jul", label: "WORLD CUP FINAL" }
+  ];
+  return { r32, r16, qf, sf, final };
+}
+
+function defaultState() {
+  return {
+    phase: "setup",
+    templateVersion: BRACKET_VERSION,
+    locks: { group: false, r32: false, r16: false, qf: false, sf: false, final: false },
+    groups: defaultGroups(),
+    results: {
+      groupWinners: {}, // { A: "Spain", B: "..." }
+      thirdsAdvancing: [], // ["Team1", ... up to 8]
+      r32: {}, // { matchId: { winner: "X", score: "2-1" } }
+      r16: {},
+      qf: {},
+      sf: {},
+      final: {}
+    },
+    fixtures: bracketTemplate(),
+    bonus: [], // [{ id, q, type: "select"|"text", options, answer, points }]
+    scoring: DEFAULT_SCORING
+  };
+}
+
+// ============================================================
+// STORAGE HELPERS
+// ============================================================
+
+async function getShared(key) {
+  if (apiReady) {
+    const remoteValue = await remoteGet(key);
+    if (remoteValue !== null) {
+      try { localStorage.setItem(key, JSON.stringify(remoteValue)); } catch {}
+      return remoteValue;
+    }
+  }
+  try {
+    return parseStored(localStorage.getItem(key));
+  } catch {
+    return null;
+  }
+}
+
+async function setShared(key, value) {
+  let savedLocal = false;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    savedLocal = true;
+  } catch (e) {
+    console.error("setShared local", e);
+  }
+  if (apiReady) {
+    await remoteSet(key, value);
+  }
+  return savedLocal;
+}
+
+async function getPersonal(key) {
+  try {
+    return parseStored(localStorage.getItem(key));
+  } catch {
+    return null;
+  }
+}
+
+async function setPersonal(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    console.error("setPersonal", e);
+    return false;
+  }
+}
+
+async function listShared(prefix) {
+  if (apiReady) {
+    const remoteKeys = await remoteList(prefix);
+    if (remoteKeys.length) return remoteKeys;
+  }
+  try {
+    return Object.keys(localStorage).filter(k => k.startsWith(prefix));
+  } catch {
+    return [];
+  }
+}
+
+// ============================================================
+// PASSWORD HASHING — SHA-256 + per-user salt
+// Not banking-grade; appropriate for a friend-group prediction app.
+// ============================================================
+async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode(password + "::" + salt);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function makeSalt() {
+  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+async function makeUserRecord(name, password) {
+  const salt = makeSalt();
+  const passwordHash = await hashPassword(password, salt);
+  return {
+    name,
+    joined: Date.now(),
+    salt,
+    passwordHash,
+    groupWinners: {},
+    thirds: [],
+    r32: {}, r16: {}, qf: {}, sf: {}, final: {},
+    bonus: {}
+  };
+}
+
+// ============================================================
+// SCORING ENGINE
+// ============================================================
+function calculateScore(predictions, state) {
+  if (!predictions || !state) return { total: 0, breakdown: {} };
+  const s = state.scoring || DEFAULT_SCORING;
+  const r = state.results || {};
+  const b = { group: 0, r32: 0, r16: 0, qf: 0, sf: 0, final: 0, bonus: 0 };
+
+  // Group winners
+  const gw = predictions.groupWinners || {};
+  Object.entries(gw).forEach(([L, pick]) => {
+    if (pick && r.groupWinners && r.groupWinners[L] && r.groupWinners[L] === pick) {
+      b.group += s.groupWinner;
+    }
+  });
+
+  // Thirds
+  const thirds = predictions.thirds || [];
+  const actualThirds = r.thirdsAdvancing || [];
+  thirds.forEach(pick => {
+    if (pick && actualThirds.includes(pick)) {
+      b.group += s.thirdPlaced;
+    }
+  });
+
+  // Knockouts
+  KO_ROUNDS.forEach(round => {
+    const userPicks = predictions[round] || {};
+    const actuals = r[round] || {};
+    Object.entries(userPicks).forEach(([mid, p]) => {
+      const a = actuals[mid];
+      if (!a) return;
+      if (p.winner && a.winner && p.winner === a.winner) {
+        b[round] += s[round];
+      }
+      if (round !== "r32") {
+        const scoreKey = round + "Score";
+        if (p.score && a.score && p.score === a.score) {
+          b[round] += s[scoreKey];
+        }
+      }
+    });
+  });
+
+  // Bonus
+  const bp = predictions.bonus || {};
+  (state.bonus || []).forEach(q => {
+    if (!q.answer) return;
+    const userAns = bp[q.id];
+    if (userAns && String(userAns).trim().toLowerCase() === String(q.answer).trim().toLowerCase()) {
+      b.bonus += (q.points || s.bonus);
+    }
+  });
+
+  const total = Object.values(b).reduce((a,c) => a+c, 0);
+  return { total, breakdown: b };
+}
+
+function getAllTeams(state) {
+  const all = [];
+  Object.values(state.groups || {}).forEach(arr => {
+    arr.forEach(t => { if (t && t.trim()) all.push(t.trim()); });
+  });
+  return all;
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+function App() {
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [state, setState] = useState(null);
+  const [users, setUsers] = useState([]); // [{ name, predictions }]
+  const [view, setView] = useState("home");
+  const [toast, setToast] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [remoteAvailable, setRemoteAvailable] = useState(false);
+
+  const showToast = useCallback((msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2400);
+  }, []);
+
+  const refreshAll = useCallback(async () => {
+    let s = await getShared("wc26_state");
+    if (!s) {
+      s = defaultState();
+      await setShared("wc26_state", s);
+    } else {
+      let needsSave = false;
+      // Migration: regenerate fixtures + groups if template version is outdated or fixtures empty
+      const needsBracket = !s.fixtures ||
+        s.templateVersion !== BRACKET_VERSION ||
+        (!s.fixtures.r32?.length && !s.fixtures.r16?.length &&
+         !s.fixtures.qf?.length && !s.fixtures.sf?.length && !s.fixtures.final?.length);
+      if (needsBracket) {
+        s.fixtures = bracketTemplate();
+        s.groups = defaultGroups();
+        s.templateVersion = BRACKET_VERSION;
+        // Clear all predictions across users — previous fixture/group IDs no longer valid
+        const userKeys = await listShared("wc26_pred:");
+        for (const k of userKeys) {
+          const u = await getShared(k);
+          if (u) {
+            u.groupWinners = {};
+            u.thirds = [];
+            u.r32 = {}; u.r16 = {}; u.qf = {}; u.sf = {}; u.final = {};
+            await setShared(k, u);
+          }
+        }
+        // Also clear all results since teams/match IDs changed
+        s.results = {
+          groupWinners: {},
+          thirdsAdvancing: [],
+          r32: {}, r16: {}, qf: {}, sf: {}, final: {}
+        };
+        needsSave = true;
+      }
+      if (needsSave) await setShared("wc26_state", s);
+    }
+    setState(s);
+    // Load all users' predictions
+    const keys = await listShared("wc26_pred:");
+    const all = [];
+    for (const k of keys) {
+      const data = await getShared(k);
+      if (data) all.push(data);
+    }
+    setUsers(all);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const savedUser = await getPersonal("current_user");
+      if (savedUser) setUser(savedUser);
+      const remoteReady = await initApi();
+      setRemoteAvailable(remoteReady);
+      await refreshAll();
+      setLoading(false);
+    })();
+  }, [refreshAll]);
+
+  useEffect(() => {
+    if (!remoteAvailable) return;
+    const id = setInterval(() => refreshAll(), SYNC_POLL_MS);
+    return () => clearInterval(id);
+  }, [remoteAvailable, refreshAll]);
+
+  const login = useCallback(async (name) => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    setUser(cleanName);
+    await setPersonal("current_user", cleanName);
+    await refreshAll();
+  }, [refreshAll]);
+
+  const logout = useCallback(async () => {
+    setUser(null);
+    setIsAdmin(false);
+    await setPersonal("current_user", "");
+  }, []);
+
+  const myPredictions = useMemo(() => {
+    if (!user || !users) return null;
+    return users.find(u => u.name === user);
+  }, [user, users]);
+
+  const updateMyPredictions = useCallback(async (mutator) => {
+    if (!user) return;
+    let p = await getShared("wc26_pred:" + user);
+    if (!p) p = { name: user, joined: Date.now(), groupWinners: {}, thirds: [], r32:{},r16:{},qf:{},sf:{},final:{}, bonus: {} };
+    const updated = mutator({ ...p });
+    await setShared("wc26_pred:" + user, updated);
+    setUsers(prev => {
+      const exists = prev.some(u => u.name === user);
+      if (exists) return prev.map(u => u.name === user ? updated : u);
+      return [...prev, updated];
+    });
+  }, [user]);
+
+  const updateState = useCallback(async (mutator) => {
+    const s = await getShared("wc26_state") || defaultState();
+    const updated = mutator({ ...s });
+    await setShared("wc26_state", updated);
+    setState(updated);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="login-wrap">
+        <div style={{ fontFamily: 'Anton', fontSize: 32, letterSpacing: '0.04em', color: 'var(--ink-mute)' }}>
+          LOADING…
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginView onLogin={login} remoteAvailable={remoteAvailable} />;
+  }
+
+  return (
+    <>
+      <div className="app">
+        <header className="top">
+          <div className="brand">
+            <div className="brand-mark">PANEN<span className="accent">KA</span></div>
+            <div className="brand-sub">wc26 · friends league</div>
+          </div>
+          <div className="user-pill">
+            <span className="dot"></span>
+            <span>{user}</span>
+            <button onClick={logout}>switch</button>
+          </div>
+        </header>
+
+        <nav className="nav">
+          <button className={view==="home"?"active":""} onClick={()=>setView("home")}>Home</button>
+          <button className={view==="predict"?"active":""} onClick={()=>setView("predict")}>Predict</button>
+          <button className={view==="bonus"?"active":""} onClick={()=>setView("bonus")}>Bonus</button>
+          <button className={view==="leaderboard"?"active":""} onClick={()=>setView("leaderboard")}>Leaderboard</button>
+          <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>
+        </nav>
+
+        {view==="home" && <HomeView state={state} user={user} myPred={myPredictions} users={users} onRefresh={refreshAll} setView={setView} />}
+        {view==="predict" && <PredictView state={state} myPred={myPredictions} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
+        {view==="bonus" && <BonusView state={state} myPred={myPredictions} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
+        {view==="leaderboard" && <LeaderboardView state={state} users={users} currentUser={user} />}
+        {view==="admin" && <AdminView state={state} users={users} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} showToast={showToast} onRefresh={refreshAll} />}
+      </div>
+      {toast && <div className="toast">{toast}</div>}
+    </>
+  );
+}
+
+// ============================================================
+// LOGIN
+// ============================================================
+function LoginView({ onLogin, remoteAvailable }) {
+  const [step, setStep] = useState("name"); // name | signin | claim | signup
+  const [name, setName] = useState("");
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [roster, setRoster] = useState(null);
+
+  useEffect(() => {
+    fetch('/data/users.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => data?.players?.length && setRoster(data.players.map(p => p.displayName)))
+      .catch(() => {});
+  }, []);
+
+  const cleanName = name.trim();
+
+  const checkName = async () => {
+    if (!cleanName) { setError("Enter a name first"); return; }
+    if (cleanName.length > 30) { setError("Keep it under 30 characters"); return; }
+    setBusy(true); setError("");
+    const existing = await getShared("wc26_pred:" + cleanName);
+    setBusy(false);
+    if (!existing) {
+      setStep("signup");
+    } else if (!existing.passwordHash) {
+      setStep("claim"); // legacy record without password
+    } else {
+      setStep("signin");
+    }
+  };
+
+  const doSignin = async () => {
+    setBusy(true); setError("");
+    const existing = await getShared("wc26_pred:" + cleanName);
+    if (!existing) { setError("Account vanished — refresh and try again"); setBusy(false); return; }
+    const hash = await hashPassword(pw, existing.salt);
+    setBusy(false);
+    if (hash !== existing.passwordHash) {
+      setError("Wrong password. Ask the admin to reset if you forgot.");
+      return;
+    }
+    onLogin(cleanName);
+  };
+
+  const doSignupOrClaim = async () => {
+    if (pw.length < 4) { setError("Password should be at least 4 characters"); return; }
+    if (pw !== pw2) { setError("Passwords don't match"); return; }
+    setBusy(true); setError("");
+    if (step === "signup") {
+      const newUser = await makeUserRecord(cleanName, pw);
+      await setShared("wc26_pred:" + cleanName, newUser);
+    } else {
+      // claim existing legacy record
+      const existing = await getShared("wc26_pred:" + cleanName);
+      if (!existing) { setError("Account vanished — refresh"); setBusy(false); return; }
+      const salt = makeSalt();
+      const passwordHash = await hashPassword(pw, salt);
+      await setShared("wc26_pred:" + cleanName, { ...existing, salt, passwordHash });
+    }
+    setBusy(false);
+    onLogin(cleanName);
+  };
+
+  const goBack = () => {
+    setStep("name"); setPw(""); setPw2(""); setError("");
+  };
+
+  return (
+    <div className="app">
+      <div className="login-wrap">
+        <div className="login-card">
+          <div className="eyebrow">FIFA WORLD CUP · USA · CANADA · MEXICO · 2026</div>
+          <div className="login-title">PANEN<span className="it">ka.</span></div>
+          <p className="login-sub">
+            {step === "name" && "The friends WC26 prediction league. Named after Antonín Panenka — the chipped penalty heard around the world, 1976. Same energy here: bold picks, big points, eternal bragging rights."}
+            {step === "signin" && <>Welcome back, <strong style={{ color: 'var(--accent)' }}>{cleanName}</strong>. Enter your password to access your predictions.</>}
+            {step === "claim" && <>Looks like <strong style={{ color: 'var(--accent)' }}>{cleanName}</strong> exists from before passwords were required. Set one now to protect your picks.</>}
+            {step === "signup" && <>New player. Welcome to PANENKA. Pick a password — you'll need it every time you sign in, and the admin can reset it if you forget.</>}
+          </p>
+          {!remoteAvailable && (
+            <div className="lock-banner" style={{ borderColor: 'rgba(255,59,48,0.3)', color: 'var(--red)', marginBottom: 16 }}>
+              ⚠️ Shared storage is offline. Predictions only save on this device until /api/store works with Upstash Redis linked in Vercel (see DEPLOYMENT_GUIDE.md).
+            </div>
+          )}
+
+          {step === "name" && roster?.length > 0 && (
+            <div className="helper" style={{ marginBottom: 14, lineHeight: 1.5 }}>
+              Use the exact name your admin gave you: {roster.join(', ')}. Edit <code style={{ fontFamily: 'JetBrains Mono', fontSize: 11 }}>data/users.json</code> before deploy to set real names.
+            </div>
+          )}
+
+          {step === "name" && (
+            <>
+              <div className="field">
+                <label>Your name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Karan, Manan, Aman, Riya…"
+                  value={name}
+                  onChange={e=>setName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter" && checkName()}
+                  autoFocus
+                  disabled={busy}
+                />
+                <div className="helper">Use the same name every time. It's how your predictions stay attached to you.</div>
+              </div>
+              {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+              <button className="btn btn-primary" onClick={checkName} disabled={busy} style={{ width: '100%', justifyContent: 'center', padding: '14px' }}>
+                {busy ? "Checking…" : "Continue →"}
+              </button>
+            </>
+          )}
+
+          {step === "signin" && (
+            <>
+              <div className="field">
+                <label>Password</label>
+                <input
+                  type="password"
+                  placeholder="Your password"
+                  value={pw}
+                  onChange={e=>setPw(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter" && doSignin()}
+                  autoFocus
+                  disabled={busy}
+                />
+              </div>
+              {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
+                <button className="btn btn-primary" onClick={doSignin} disabled={busy} style={{ flex: 1, justifyContent: 'center' }}>
+                  {busy ? "Verifying…" : "Sign in →"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {(step === "claim" || step === "signup") && (
+            <>
+              <div className="field">
+                <label>{step === "claim" ? "Set a password" : "Create a password"}</label>
+                <input
+                  type="password"
+                  placeholder="Min 4 characters"
+                  value={pw}
+                  onChange={e=>setPw(e.target.value)}
+                  autoFocus
+                  disabled={busy}
+                />
+              </div>
+              <div className="field">
+                <label>Confirm password</label>
+                <input
+                  type="password"
+                  placeholder="Type it again"
+                  value={pw2}
+                  onChange={e=>setPw2(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter" && doSignupOrClaim()}
+                  disabled={busy}
+                />
+                <div className="helper">Write it down somewhere. Admin can reset if you forget, but it's easier not to.</div>
+              </div>
+              {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-ghost" onClick={goBack} disabled={busy}>← Back</button>
+                <button className="btn btn-primary" onClick={doSignupOrClaim} disabled={busy} style={{ flex: 1, justifyContent: 'center' }}>
+                  {busy ? "Setting up…" : step === "signup" ? "Join the league →" : "Save & sign in →"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// HOME VIEW
+// ============================================================
+function HomeView({ state, user, myPred, users, onRefresh, setView }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const score = useMemo(() => myPred ? calculateScore(myPred, state) : { total: 0, breakdown: {} }, [myPred, state]);
+  const allScores = useMemo(() => {
+    return users.map(u => ({ name: u.name, ...calculateScore(u, state) }))
+                .sort((a,b) => b.total - a.total);
+  }, [users, state]);
+  const myRank = allScores.findIndex(s => s.name === user) + 1;
+  const leader = allScores[0];
+  const totalUsers = allScores.length;
+
+  // ---- Countdown to opening match (Mexico City, 11 June 2026, ~18:00 local) ----
+  const KICKOFF = new Date('2026-06-11T23:00:00Z').getTime();
+  const diff = Math.max(0, KICKOFF - now);
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+  const kickoffPassed = diff === 0;
+  const pad = n => String(n).padStart(2, '0');
+
+  // ---- Phase progress timeline ----
+  const phaseOrder = ["setup","group","r32","r16","qf","sf","final","done"];
+  const currentPhaseIdx = phaseOrder.indexOf(state.phase);
+
+  // ---- Submission status (group stage completeness) ----
+  const myGroupWinnersCount = Object.values(myPred?.groupWinners || {}).filter(Boolean).length;
+  const myThirdsCount = (myPred?.thirds || []).length;
+  const myGroupPicksDone = myGroupWinnersCount === 12 && myThirdsCount === 8;
+  const friendsLocked = users.filter(u => {
+    const w = Object.values(u.groupWinners || {}).filter(Boolean).length;
+    return w === 12 && (u.thirds || []).length === 8;
+  }).length;
+
+  // ---- Phase-aware hero ----
+  const heroByPhase = {
+    setup:  { eyebrow: "AWAITING KICKOFF", l1: "PRE",      l2: "season."   },
+    group:  { eyebrow: "PHASE 1 · LIVE",   l1: "PICK YOUR", l2: "winners." },
+    r32:    { eyebrow: "PHASE 2 · LAST 32",l1: "ROUND",     l2: "of 32."   },
+    r16:    { eyebrow: "PHASE 3 · LAST 16",l1: "ROUND",     l2: "of 16."   },
+    qf:     { eyebrow: "PHASE 4 · QUARTERS",l1: "QUARTER",  l2: "finals."  },
+    sf:     { eyebrow: "PHASE 5 · SEMIS",  l1: "SEMI",      l2: "finals."  },
+    final:  { eyebrow: "PHASE 6 · FINAL",  l1: "THE",       l2: "final."   },
+    done:   { eyebrow: "TOURNAMENT OVER",  l1: "GLORY",     l2: "decided." }
+  };
+  const hero = heroByPhase[state.phase] || heroByPhase.group;
+
+  // ---- CTA logic ----
+  let cta = null;
+  if (state.phase === "setup") {
+    cta = { eyebrow: "GET READY", title: "Tournament hasn't kicked off", sub: "Admin is finalising the group draw. Predictions open soon.", action: null };
+  } else if (state.phase === "group" && !state.locks.group && !myGroupPicksDone) {
+    cta = {
+      eyebrow: "UNFINISHED BUSINESS",
+      title: "Your group stage picks aren't done",
+      sub: `${myGroupWinnersCount}/12 winners locked · ${myThirdsCount}/8 thirds picked`,
+      action: { label: "Finish picks →", to: "predict" }
+    };
+  } else if (state.phase !== "setup" && state.phase !== "done" && state.phase !== "group" && !state.locks[state.phase]) {
+    const myRoundPicks = Object.keys(myPred?.[state.phase] || {}).length;
+    const totalFixtures = (state.fixtures[state.phase] || []).length;
+    if (myRoundPicks < totalFixtures) {
+      cta = {
+        eyebrow: PHASE_LABELS[state.phase].toUpperCase() + " · OPEN",
+        title: "Lock in your knockout picks",
+        sub: `${myRoundPicks}/${totalFixtures} matches predicted`,
+        action: { label: "Predict now →", to: "predict" }
+      };
+    }
+  }
+
+  return (
+    <div>
+      {/* ---- HERO ---- */}
+      <div className="page-head">
+        <div className="eyebrow">PANENKA · {hero.eyebrow}</div>
+        <h1 className="page-title">{hero.l1}<br/><span className="it">{hero.l2}</span></h1>
+        <p className="page-sub">
+          {state.phase === "setup"
+            ? "9 days to kickoff. Admin's setting the table — once the draw teams are in, predictions open and the league goes live."
+            : state.phase === "done"
+            ? "Tournament concluded. The standings are final. Check the leaderboard to see who took the crown."
+            : `Currently running: ${PHASE_LABELS[state.phase]}. Lock in your picks before the round starts — once admin locks the phase, no changes allowed.`}
+        </p>
+      </div>
+
+      {/* ---- COUNTDOWN ---- */}
+      {!kickoffPassed ? (
+        <div className="countdown-row">
+          <div>
+            <div className="countdown-label">KICKOFF IN</div>
+            <div className="countdown-where">Mexico City · Jun 11 · WC2026 opens</div>
+          </div>
+          <div className="countdown-numbers">
+            <div className="cd-unit"><div className="cd-val">{pad(days)}</div><div className="cd-label">DAYS</div></div>
+            <div className="cd-sep">:</div>
+            <div className="cd-unit"><div className="cd-val">{pad(hours)}</div><div className="cd-label">HRS</div></div>
+            <div className="cd-sep">:</div>
+            <div className="cd-unit"><div className="cd-val">{pad(minutes)}</div><div className="cd-label">MIN</div></div>
+            <div className="cd-sep">:</div>
+            <div className="cd-unit"><div className="cd-val">{pad(seconds)}</div><div className="cd-label">SEC</div></div>
+          </div>
+        </div>
+      ) : (
+        <div className="countdown-row live">
+          <div>
+            <div className="countdown-label">🔴 TOURNAMENT LIVE</div>
+            <div className="countdown-where">WC2026 in progress · {PHASE_LABELS[state.phase]}</div>
+          </div>
+          <div className="countdown-numbers">
+            <div className="cd-unit"><div className="cd-val" style={{ color: 'var(--green)'}}>GO</div><div className="cd-label">FOOTBALL</div></div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- PHASE TIMELINE ---- */}
+      <div className="phase-timeline">
+        {phaseOrder.map((p, i) => (
+          <React.Fragment key={p}>
+            <div className={"phase-node" + (i < currentPhaseIdx ? " done" : i === currentPhaseIdx ? " current" : "")}>
+              <div className="phase-dot"></div>
+              <div className="phase-name">{PHASE_LABELS[p].replace("Quarter-finals","QF").replace("Semi-finals","SF").replace("Tournament Over","Done")}</div>
+            </div>
+            {i < phaseOrder.length - 1 && <div className={"phase-line" + (i < currentPhaseIdx ? " done" : "")}></div>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      {/* ---- CTA ---- */}
+      {cta && (
+        <div className="cta-card">
+          <div>
+            <div className="cta-eyebrow">{cta.eyebrow}</div>
+            <div className="cta-title">{cta.title}</div>
+            <div className="cta-sub">{cta.sub}</div>
+          </div>
+          {cta.action && (
+            <button className="btn btn-primary" onClick={() => setView(cta.action.to)}>{cta.action.label}</button>
+          )}
+        </div>
+      )}
+
+      {/* ---- STATS ROW ---- */}
+      <div className="stat-row">
+        <div className="stat">
+          <div className="stat-label">Your Points</div>
+          <div className="stat-value accent">{score.total}</div>
+          <div className="stat-sub">Rank #{myRank > 0 ? myRank : "—"} of {totalUsers}</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">League Leader</div>
+          <div className="stat-value" style={{ fontSize: 26 }}>{leader ? leader.name.toUpperCase() : "—"}</div>
+          <div className="stat-sub">{leader ? `${leader.total} points` : "no picks yet"}</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Players In</div>
+          <div className="stat-value green">{totalUsers}</div>
+          <div className="stat-sub">{friendsLocked} with full picks</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Status</div>
+          <div className="stat-value" style={{ fontSize: 22 }}>{state.locks[state.phase] ? "LOCKED" : "OPEN"}</div>
+          <div className="stat-sub">{PHASE_LABELS[state.phase]}</div>
+        </div>
+      </div>
+
+      {/* ---- PODIUM + BREAKDOWN ---- */}
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-title">
+            Top of the Table
+            <button className="btn btn-ghost btn-sm" onClick={() => setView("leaderboard")}>View all →</button>
+          </div>
+          {allScores.length === 0 ? (
+            <div className="empty-mini">No players have predictions yet</div>
+          ) : (
+            <div className="podium">
+              {allScores.slice(0, 5).map((s, i) => (
+                <div key={s.name} className="podium-row">
+                  <div className={"podium-rank" + (i === 0 ? " gold" : i === 1 ? " silver" : i === 2 ? " bronze" : "")}>{i+1}</div>
+                  <div className="podium-name">{s.name}{s.name === user ? " · you" : ""}</div>
+                  <div className="podium-pts">{s.total}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="card-title">
+            Your Breakdown
+            <button className="btn btn-ghost btn-sm" onClick={onRefresh}>↻ Refresh</button>
+          </div>
+          <ul className="rules-list">
+            <li><span className="rule-name">Group stage</span><span className="rule-points">{score.breakdown.group||0}</span></li>
+            <li><span className="rule-name">Round of 32</span><span className="rule-points">{score.breakdown.r32||0}</span></li>
+            <li><span className="rule-name">Round of 16</span><span className="rule-points">{score.breakdown.r16||0}</span></li>
+            <li><span className="rule-name">Quarter-finals</span><span className="rule-points">{score.breakdown.qf||0}</span></li>
+            <li><span className="rule-name">Semi-finals</span><span className="rule-points">{score.breakdown.sf||0}</span></li>
+            <li><span className="rule-name">Final</span><span className="rule-points">{score.breakdown.final||0}</span></li>
+            <li><span className="rule-name">Bonus questions</span><span className="rule-points">{score.breakdown.bonus||0}</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div style={{ height: 18 }}></div>
+
+      {/* ---- SCORING + ABOUT ---- */}
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-title">
+            Scoring · Points
+            <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>PER CORRECT</span>
+          </div>
+          <ul className="rules-list compact">
+            <li><span className="rule-name">Group winner / 3rd-placed team</span><span className="rule-points">{state.scoring.groupWinner}</span></li>
+            <li><span className="rule-name">R32 winner</span><span className="rule-points">{state.scoring.r32}</span></li>
+            <li><span className="rule-name">R16 / QF / SF / Final winner</span><span className="rule-points">{state.scoring.r16}</span></li>
+            <li><span className="rule-name">R16+ exact score</span><span className="rule-points">{state.scoring.r16Score}</span></li>
+            <li><span className="rule-name">Bonus question</span><span className="rule-points">{state.scoring.bonus}</span></li>
+          </ul>
+        </div>
+
+        <div className="card">
+          <div className="card-title">The Panenka</div>
+          <p style={{ color: 'var(--ink-dim)', fontSize: 14, lineHeight: 1.65 }}>
+            <span style={{ fontFamily: 'Fraunces', fontStyle: 'italic', color: 'var(--accent-2)' }}>1976. Belgrade. European Championship final.</span> Czechoslovakia vs West Germany, sudden-death penalties. Antonín Panenka steps up, eyes Sepp Maier in goal, then chips the ball gently down the middle as the keeper dives. Trophy won.
+          </p>
+          <p style={{ color: 'var(--ink-dim)', fontSize: 14, lineHeight: 1.65, marginTop: 12 }}>
+            That's the energy. Make the bold pick. Call the upset. Stack points. Earn bragging rights.
+          </p>
+        </div>
+      </div>
+
+      <div className="divider"></div>
+
+      {/* ---- HOW IT RUNS ---- */}
+      <div className="card">
+        <div className="card-title">How the league runs</div>
+        <div style={{ color: 'var(--ink-dim)', fontSize: 14, lineHeight: 1.7 }}>
+          <p style={{ marginBottom: 10 }}>
+            <strong style={{ color: 'var(--ink)'}}>1 · Setup:</strong> Admin sets up the 12 group draw teams and opens predictions.
+          </p>
+          <p style={{ marginBottom: 10 }}>
+            <strong style={{ color: 'var(--ink)'}}>2 · Group stage:</strong> Pick 12 group winners + 8 advancing third-placed teams. {state.scoring.groupWinner} point each.
+          </p>
+          <p style={{ marginBottom: 10 }}>
+            <strong style={{ color: 'var(--ink)'}}>3 · Knockouts unlock progressively:</strong> R32 ({state.scoring.r32}pts) → R16/QF/SF/F ({state.scoring.r16}pts winner + {state.scoring.r16Score}pts exact score).
+          </p>
+          <p>
+            <strong style={{ color: 'var(--ink)'}}>4 · Bonus Qs throughout:</strong> Player of tournament, dark horses, top scorer — {state.scoring.bonus} points each.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PREDICT VIEW
+// ============================================================
+function PredictView({ state, myPred, updateMyPredictions, showToast }) {
+  if (!myPred) return <div className="empty"><div className="empty-title">Loading…</div></div>;
+  const phase = state.phase;
+
+  if (phase === "setup") {
+    return (
+      <div>
+        <div className="page-head">
+          <div className="eyebrow">Pre-tournament</div>
+          <h1 className="page-title">SETUP <span className="it">pending</span></h1>
+          <p className="page-sub">Admin is still adding the group draw teams. Once setup is done and group stage opens, you can start predicting.</p>
+        </div>
+        <div className="empty">
+          <div className="empty-title">NO PREDICTIONS YET</div>
+          <p>Check back after admin sets up the groups and opens the predictions.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "group") {
+    return <GroupPredictView state={state} myPred={myPred} updateMyPredictions={updateMyPredictions} showToast={showToast} />;
+  }
+
+  return <KnockoutPredictView state={state} myPred={myPred} updateMyPredictions={updateMyPredictions} showToast={showToast} round={phase} />;
+}
+
+function GroupPredictView({ state, myPred, updateMyPredictions, showToast }) {
+  const locked = state.locks.group;
+  const groups = state.groups || {};
+  const winners = myPred.groupWinners || {};
+  const thirds = myPred.thirds || [];
+  const allTeams = getAllTeams(state);
+  const actualWinners = state.results.groupWinners || {};
+  const actualThirds = state.results.thirdsAdvancing || [];
+  const hasResults = Object.keys(actualWinners).length > 0;
+
+  const setWinner = (L, team) => {
+    if (locked) { showToast("Group predictions locked"); return; }
+    updateMyPredictions(p => ({ ...p, groupWinners: { ...p.groupWinners, [L]: team } }));
+  };
+
+  const toggleThird = (team) => {
+    if (locked) { showToast("Group predictions locked"); return; }
+    updateMyPredictions(p => {
+      const cur = p.thirds || [];
+      if (cur.includes(team)) {
+        return { ...p, thirds: cur.filter(t => t !== team) };
+      } else {
+        if (cur.length >= 8) { showToast("Max 8 third-placed teams"); return p; }
+        return { ...p, thirds: [...cur, team] };
+      }
+    });
+  };
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">PHASE 1 · GROUP STAGE</div>
+        <h1 className="page-title">PICK 12 <span className="it">winners</span><br/>+ 8 <span className="it">thirds</span></h1>
+        <p className="page-sub">
+          Choose who tops each group, then mark the 8 best third-placed teams you think will advance to the Round of 32. 1 point per correct call.
+        </p>
+      </div>
+
+      {locked && (
+        <div className="lock-banner">
+          🔒 Group stage predictions are locked. Showing your locked picks{hasResults ? " vs actual results" : ""}.
+        </div>
+      )}
+
+      <h3 style={{ fontFamily: 'Anton', fontSize: 24, letterSpacing: '0.04em', marginBottom: 16, color: 'var(--accent-2)' }}>
+        Group Winners <span style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>· {Object.values(winners).filter(Boolean).length}/12 picked</span>
+      </h3>
+
+      <div className="grid grid-3" style={{ marginBottom: 40 }}>
+        {GROUP_LETTERS.map(L => {
+          const teams = groups[L] || ["","","",""];
+          const setupDone = teams.every(t => t && t.trim());
+          const pick = winners[L];
+          const actual = actualWinners[L];
+          return (
+            <div key={L} className="card group-card">
+              <div className="group-head">
+                <span className="group-letter">GROUP {L}</span>
+                <span className="group-tag">
+                  {!setupDone ? "TBD" : actual ? `WINNER · ${actual.toUpperCase()}` : "PICK 1"}
+                </span>
+              </div>
+              {teams.map((t, i) => {
+                if (!t || !t.trim()) {
+                  return <div key={i} className="team-row faded"><span className="team-radio"></span><span className="team-name">— TBD —</span></div>;
+                }
+                const isChecked = pick === t;
+                let cls = "team-radio";
+                if (isChecked) cls += " checked";
+                if (actual && isChecked) cls += pick === actual ? " correct" : " wrong";
+                return (
+                  <div key={i} className={"team-row" + (locked ? " locked" : "")} onClick={() => setWinner(L, t)}>
+                    <span className={cls}></span>
+                    <span className="team-name">{t}</span>
+                    {actual === t && <span style={{ fontSize: 10, color: 'var(--green)', fontFamily: 'JetBrains Mono', letterSpacing: '0.1em' }}>WINNER</span>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      <h3 style={{ fontFamily: 'Anton', fontSize: 24, letterSpacing: '0.04em', marginBottom: 16, color: 'var(--accent-2)' }}>
+        Best Third-Placed Teams <span style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>· {thirds.length}/8 picked</span>
+      </h3>
+      <p className="helper" style={{ marginBottom: 16 }}>
+        In the 2026 format with 12 groups of 4, the top 2 from each group plus the 8 best third-placed teams qualify for the Round of 32. Pick 8 teams you think will sneak through as the best 3rd-placers.
+      </p>
+
+      {allTeams.length === 0 ? (
+        <div className="empty"><div className="empty-title">No teams yet</div><p>Admin needs to fill in the group draw first.</p></div>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {allTeams.map(t => {
+            const picked = thirds.includes(t);
+            const isActual = actualThirds.includes(t);
+            let cls = "team-pick";
+            if (picked) cls += " selected";
+            if (hasResults && picked && isActual) cls = "team-pick correct-pick";
+            if (hasResults && picked && !isActual) cls = "team-pick wrong-pick";
+            return (
+              <div key={t} className={cls} style={{ minWidth: 130, cursor: locked ? 'not-allowed' : 'pointer' }} onClick={() => toggleThird(t)}>
+                {t}
+                {hasResults && isActual && !picked && <div style={{ fontSize: 9, marginTop: 4, color: 'var(--green)', fontFamily: 'JetBrains Mono', letterSpacing: '0.1em' }}>ACTUAL</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KnockoutPredictView({ state, myPred, updateMyPredictions, showToast, round }) {
+  const locked = state.locks[round];
+  const fixtures = (state.fixtures[round] || []);
+  const userPicks = myPred[round] || {};
+  const actuals = state.results[round] || {};
+  const wantScore = round !== "r32";
+
+  const setWinner = (mid, team) => {
+    if (locked) { showToast("Predictions locked"); return; }
+    updateMyPredictions(p => ({
+      ...p,
+      [round]: { ...p[round], [mid]: { ...(p[round]||{})[mid], winner: team } }
+    }));
+  };
+  const setScore = (mid, score) => {
+    if (locked) { showToast("Predictions locked"); return; }
+    updateMyPredictions(p => ({
+      ...p,
+      [round]: { ...p[round], [mid]: { ...(p[round]||{})[mid], score } }
+    }));
+  };
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">PHASE · {PHASE_LABELS[round].toUpperCase()}</div>
+        <h1 className="page-title">{round === "r32" ? "ROUND OF 32" : round === "r16" ? "ROUND OF 16" : round === "qf" ? "QUARTER FINALS" : round === "sf" ? "SEMIS" : "THE FINAL"}<br/><span className="it">predict.</span></h1>
+        <p className="page-sub">
+          {wantScore
+            ? `Pick the winner and the exact score for every match. ${state.scoring[round]} pts winner + ${state.scoring[round+"Score"]} pts exact score.`
+            : `Pick the winner of each fixture. ${state.scoring.r32} pts per correct call.`}
+        </p>
+      </div>
+
+      {locked && (
+        <div className="lock-banner">
+          🔒 {PHASE_LABELS[round]} predictions are locked.
+        </div>
+      )}
+
+      {fixtures.length === 0 ? (
+        <div className="empty"><div className="empty-title">FIXTURES PENDING</div><p>Admin hasn't added the {PHASE_LABELS[round]} fixtures yet.</p></div>
+      ) : (
+        <div className="grid grid-2">
+          {fixtures.map((f, idx) => {
+            const u = userPicks[f.id] || {};
+            const a = actuals[f.id] || {};
+            const hasResult = !!a.winner;
+            const winnerCorrect = hasResult && u.winner === a.winner;
+            const scoreCorrect = hasResult && a.score && u.score === a.score;
+            const score = u.score || "";
+            const [s1, s2] = score.split("-");
+            return (
+              <div key={f.id} className="match-card">
+                <div className="match-num">{f.label || `MATCH ${f.num || idx+1}`} · {f.venue ? f.venue.toUpperCase() : PHASE_LABELS[round].toUpperCase()}{f.date ? ` · ${f.date.toUpperCase()}` : ""}</div>
+                <div className="match-teams">
+                  {[f.team1, f.team2].map(t => {
+                    let cls = "team-pick";
+                    if (u.winner === t) cls += " selected";
+                    if (hasResult && u.winner === t && winnerCorrect) cls = "team-pick correct-pick";
+                    if (hasResult && u.winner === t && !winnerCorrect) cls = "team-pick wrong-pick";
+                    if (hasResult && a.winner === t && u.winner !== t) cls += " actual-winner";
+                    return (
+                      <div key={t} className={cls} onClick={() => setWinner(f.id, t)} style={{ cursor: locked ? 'not-allowed' : 'pointer' }}>
+                        {t}
+                        {hasResult && a.winner === t && <div style={{ fontSize: 9, marginTop: 4, color: 'var(--green)', fontFamily: 'JetBrains Mono', letterSpacing: '0.1em' }}>WON</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+                {wantScore && (
+                  <div className="score-row">
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={s1 || ""}
+                      disabled={locked}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, "");
+                        const cur = (u.score || "").split("-");
+                        setScore(f.id, `${v}-${cur[1]||""}`);
+                      }}
+                      placeholder="0"
+                    />
+                    <span className="score-dash">–</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={s2 || ""}
+                      disabled={locked}
+                      onChange={e => {
+                        const v = e.target.value.replace(/[^0-9]/g, "");
+                        const cur = (u.score || "").split("-");
+                        setScore(f.id, `${cur[0]||""}-${v}`);
+                      }}
+                      placeholder="0"
+                    />
+                  </div>
+                )}
+                {hasResult && (
+                  <div className="match-result-strip">
+                    <span>ACTUAL · {a.winner}{a.score ? ` (${a.score})` : ""}</span>
+                    <span className="pts-badge">
+                      +{(winnerCorrect ? state.scoring[round] : 0) + (wantScore && scoreCorrect ? state.scoring[round+"Score"] : 0)} pts
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// BONUS VIEW
+// ============================================================
+function BonusView({ state, myPred, updateMyPredictions, showToast }) {
+  if (!myPred) return null;
+  const questions = state.bonus || [];
+  const myAnswers = myPred.bonus || {};
+
+  const setAnswer = (qid, val, locked) => {
+    if (locked) { showToast("Question locked"); return; }
+    updateMyPredictions(p => ({ ...p, bonus: { ...(p.bonus || {}), [qid]: val } }));
+  };
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">{state.scoring.bonus} POINTS · EACH</div>
+        <h1 className="page-title">BONUS<br/><span className="it">questions.</span></h1>
+        <p className="page-sub">Player of the tournament, dark horses, biggest surprise — answer the random questions admin throws in. Worth {state.scoring.bonus} points each.</p>
+      </div>
+
+      {questions.length === 0 ? (
+        <div className="empty">
+          <div className="empty-title">NO BONUS QUESTIONS YET</div>
+          <p>Admin hasn't added any bonus questions. Check back later.</p>
+        </div>
+      ) : (
+        <div>
+          {questions.map(q => {
+            const myAns = myAnswers[q.id] || "";
+            const locked = q.locked;
+            const hasAnswer = !!q.answer;
+            return (
+              <div key={q.id} className="card bonus-card">
+                <div className="bonus-q">{q.q}</div>
+                {q.type === "select" && q.options && q.options.length > 0 ? (
+                  <div className="bonus-opts">
+                    {q.options.map(o => {
+                      let cls = "bonus-opt";
+                      if (myAns === o) cls += " selected";
+                      if (hasAnswer && myAns === o && o === q.answer) cls = "bonus-opt correct";
+                      if (hasAnswer && myAns === o && o !== q.answer) cls = "bonus-opt wrong";
+                      return (
+                        <div key={o} className={cls} onClick={() => setAnswer(q.id, o, locked)} style={{ cursor: locked ? 'not-allowed' : 'pointer' }}>
+                          {o}
+                          {hasAnswer && o === q.answer && myAns !== o && <div style={{ fontSize: 9, marginTop: 4, color: 'var(--green)', fontFamily: 'JetBrains Mono', letterSpacing: '0.1em' }}>ANSWER</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    className="bonus-text-in"
+                    value={myAns}
+                    placeholder="Type your answer…"
+                    disabled={locked}
+                    onChange={e => setAnswer(q.id, e.target.value, locked)}
+                  />
+                )}
+                <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', fontSize: 11, fontFamily: 'JetBrains Mono', letterSpacing: '0.1em', color: 'var(--ink-mute)' }}>
+                  <span>{(q.points || state.scoring.bonus)} PTS · {locked ? "🔒 LOCKED" : "OPEN"}</span>
+                  {hasAnswer && <span style={{ color: 'var(--green)' }}>ANSWER: {q.answer}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// LEADERBOARD
+// ============================================================
+function LeaderboardView({ state, users, currentUser }) {
+  const ranked = useMemo(() => {
+    return users.map(u => ({ name: u.name, ...calculateScore(u, state) }))
+                .sort((a,b) => b.total - a.total);
+  }, [users, state]);
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">LIVE STANDINGS</div>
+        <h1 className="page-title">THE <span className="it">leaderboard</span></h1>
+      </div>
+
+      {ranked.length === 0 ? (
+        <div className="empty"><div className="empty-title">NO PLAYERS YET</div><p>Once friends sign in and make predictions, they'll show here.</p></div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+          <table className="lb-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Breakdown</th>
+                <th style={{ textAlign: 'right' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((r, i) => {
+                let rankCls = "lb-rank";
+                if (i === 0) rankCls += " gold";
+                else if (i === 1) rankCls += " silver";
+                else if (i === 2) rankCls += " bronze";
+                return (
+                  <tr key={r.name} style={{ background: r.name === currentUser ? 'var(--card-2)' : 'transparent' }}>
+                    <td><div className={rankCls}>{i+1}</div></td>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}{r.name === currentUser ? " (you)" : ""}</div>
+                    </td>
+                    <td>
+                      <div className="lb-breakdown">
+                        <span>GRP <strong>{r.breakdown.group||0}</strong></span>
+                        <span>R32 <strong>{r.breakdown.r32||0}</strong></span>
+                        <span>R16 <strong>{r.breakdown.r16||0}</strong></span>
+                        <span>QF <strong>{r.breakdown.qf||0}</strong></span>
+                        <span>SF <strong>{r.breakdown.sf||0}</strong></span>
+                        <span>FIN <strong>{r.breakdown.final||0}</strong></span>
+                        <span>BONUS <strong>{r.breakdown.bonus||0}</strong></span>
+                      </div>
+                    </td>
+                    <td className="lb-total">{r.total}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ADMIN VIEW
+// ============================================================
+function AdminView({ state, users, updateState, isAdmin, setIsAdmin, showToast, onRefresh }) {
+  const [pw, setPw] = useState("");
+
+  if (!isAdmin) {
+    return (
+      <div style={{ maxWidth: 480, margin: '40px auto' }}>
+        <div className="card">
+          <div className="card-title">Admin access</div>
+          <p style={{ color: 'var(--ink-dim)', fontSize: 13, marginBottom: 16 }}>
+            Only the person setting up the league should be admin. The password is set in the code by whoever deployed this — ask them if you need it.
+          </p>
+          <div className="field">
+            <label>Password</label>
+            <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter" && (pw === ADMIN_PASSWORD ? setIsAdmin(true) : showToast("Wrong password"))} />
+          </div>
+          <button className="btn btn-primary" onClick={() => pw === ADMIN_PASSWORD ? setIsAdmin(true) : showToast("Wrong password")}>Unlock admin</button>
+        </div>
+      </div>
+    );
+  }
+
+  return <AdminDashboard state={state} users={users} updateState={updateState} showToast={showToast} onRefresh={onRefresh} />;
+}
+
+function AdminDashboard({ state, users, updateState, showToast, onRefresh }) {
+  const [section, setSection] = useState("phase");
+
+  const setPhase = async (newPhase) => {
+    await updateState(s => ({ ...s, phase: newPhase }));
+    showToast(`Phase: ${PHASE_LABELS[newPhase]}`);
+  };
+
+  const toggleLock = async (round) => {
+    await updateState(s => ({ ...s, locks: { ...s.locks, [round]: !s.locks[round] } }));
+    showToast("Lock toggled");
+  };
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">ADMIN · LEAGUE CONTROL</div>
+        <h1 className="page-title">RUN THE <span className="it">tournament.</span></h1>
+        <p className="page-sub">Set up groups, advance phases, lock predictions, enter results, manage bonus questions.</p>
+        <div style={{ marginTop: 16, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div className="phase-pill"><div className="dot"></div>Phase: {PHASE_LABELS[state.phase]}</div>
+          <div className="phase-pill">{users.length} {users.length === 1 ? "player" : "players"}</div>
+          <div className="phase-pill">{(state.bonus||[]).length} bonus Qs</div>
+        </div>
+      </div>
+
+      <div className="nav" style={{ marginBottom: 28 }}>
+        {[
+          ["phase","Phase & Locks"],
+          ["players","Players"],
+          ["groups","Groups"],
+          ["fixtures","Knockout Fixtures"],
+          ["results","Enter Results"],
+          ["bonus","Bonus Questions"],
+          ["scoring","Scoring"],
+          ["danger","Reset"]
+        ].map(([k, l]) => (
+          <button key={k} className={section===k?"active":""} onClick={() => setSection(k)}>{l}</button>
+        ))}
+      </div>
+
+      {section === "phase" && (
+        <div className="card">
+          <div className="card-title">Phase Controller</div>
+          <p className="helper" style={{ marginBottom: 18 }}>
+            As the tournament progresses, advance the phase here. This controls what shows up in Predict for everyone. Lock toggles freeze predictions for that round.
+          </p>
+          <div className="grid grid-2">
+            <div>
+              <h4 style={{ fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.15em', color: 'var(--ink-mute)', marginBottom: 12 }}>CURRENT PHASE</h4>
+              <select value={state.phase} onChange={e => setPhase(e.target.value)} style={{ width: '100%', padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--ink)', fontSize: 14 }}>
+                {PHASES.map(p => <option key={p} value={p}>{PHASE_LABELS[p]}</option>)}
+              </select>
+            </div>
+            <div>
+              <h4 style={{ fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.15em', color: 'var(--ink-mute)', marginBottom: 12 }}>PREDICTION LOCKS</h4>
+              {["group","r32","r16","qf","sf","final"].map(r => (
+                <div key={r} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px dashed var(--line)' }}>
+                  <span>{PHASE_LABELS[r]}</span>
+                  <button className={"btn btn-sm " + (state.locks[r] ? "btn-danger" : "btn-ghost")} onClick={() => toggleLock(r)}>
+                    {state.locks[r] ? "🔒 Locked" : "🔓 Open"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {section === "groups" && <GroupsAdmin state={state} updateState={updateState} showToast={showToast} />}
+      {section === "players" && <PlayersAdmin users={users} showToast={showToast} onRefresh={onRefresh} />}
+      {section === "fixtures" && <FixturesAdmin state={state} updateState={updateState} showToast={showToast} />}
+      {section === "results" && <ResultsAdmin state={state} updateState={updateState} showToast={showToast} />}
+      {section === "bonus" && <BonusAdmin state={state} updateState={updateState} showToast={showToast} />}
+      {section === "scoring" && <ScoringAdmin state={state} updateState={updateState} showToast={showToast} />}
+      {section === "danger" && <DangerAdmin onRefresh={onRefresh} showToast={showToast} />}
+    </div>
+  );
+}
+
+function PlayersAdmin({ users, showToast, onRefresh }) {
+  const [resetting, setResetting] = useState(null);
+  const [newPw, setNewPw] = useState("");
+  const [revealed, setRevealed] = useState(null); // { name, pw } shown briefly after reset
+  const [deleting, setDeleting] = useState(null);
+
+  const sorted = [...users].sort((a,b) => (a.joined || 0) - (b.joined || 0));
+
+  const doReset = async () => {
+    if (!resetting) return;
+    if (newPw.length < 4) { showToast("Password too short"); return; }
+    const key = "wc26_pred:" + resetting;
+    const u = await getShared(key);
+    if (!u) { showToast("Player not found"); return; }
+    const salt = makeSalt();
+    const passwordHash = await hashPassword(newPw, salt);
+    await setShared(key, { ...u, salt, passwordHash });
+    setRevealed({ name: resetting, pw: newPw });
+    setResetting(null);
+    setNewPw("");
+    await onRefresh();
+  };
+
+  const doDelete = async () => {
+    if (!deleting) return;
+    const key = "wc26_pred:" + deleting;
+    await remoteDeleteKeys([key]);
+    localStorage.removeItem(key);
+    showToast(`Removed ${deleting}`);
+    setDeleting(null);
+    await onRefresh();
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        Players · {users.length}
+        <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>RESET PASSWORDS · REMOVE PLAYERS</span>
+      </div>
+
+      {revealed && (
+        <div className="lock-banner" style={{ background: 'rgba(47,194,106,0.1)', borderColor: 'rgba(47,194,106,0.35)', color: 'var(--green)', justifyContent: 'space-between' }}>
+          <div>
+            ✓ Password reset for <strong>{revealed.name}</strong> · Tell them: <code style={{ background: 'var(--bg)', padding: '2px 8px', color: 'var(--accent-2)', fontFamily: 'JetBrains Mono' }}>{revealed.pw}</code>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => setRevealed(null)}>Dismiss</button>
+        </div>
+      )}
+
+      {users.length === 0 ? (
+        <div className="empty"><div className="empty-title">NO PLAYERS YET</div><p>Once friends sign up they'll appear here.</p></div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sorted.map(u => {
+            const isResetting = resetting === u.name;
+            const isDeleting = deleting === u.name;
+            const joinedDate = u.joined ? new Date(u.joined).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—';
+            const groupPicks = Object.values(u.groupWinners || {}).filter(Boolean).length;
+            const thirdPicks = (u.thirds || []).length;
+            return (
+              <div key={u.name} style={{ background: 'var(--bg-2)', padding: 14, border: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontFamily: 'Anton', fontSize: 18, letterSpacing: '0.04em' }}>{u.name.toUpperCase()}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.12em', marginTop: 4 }}>
+                      JOINED {joinedDate.toUpperCase()} · {groupPicks}/12 GW · {thirdPicks}/8 THIRDS · {u.passwordHash ? "🔒 PROTECTED" : "⚠️ NO PASSWORD"}
+                    </div>
+                  </div>
+                  {!isResetting && !isDeleting && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => { setResetting(u.name); setNewPw(""); setDeleting(null); setRevealed(null); }}>Reset password</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => { setDeleting(u.name); setResetting(null); }}>Remove</button>
+                    </div>
+                  )}
+                </div>
+
+                {isResetting && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--line)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      placeholder="New password (min 4 chars)"
+                      value={newPw}
+                      onChange={e => setNewPw(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && doReset()}
+                      autoFocus
+                      style={{ flex: 1, minWidth: 200, padding: 10, background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', fontFamily: 'JetBrains Mono' }}
+                    />
+                    <button className="btn btn-primary btn-sm" onClick={doReset}>Set password</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setResetting(null); setNewPw(""); }}>Cancel</button>
+                  </div>
+                )}
+
+                {isDeleting && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--line)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, fontSize: 13, color: 'var(--ink-dim)' }}>
+                      This removes <strong>{u.name}</strong> and all their predictions. Cannot be undone.
+                    </div>
+                    <button className="btn btn-danger btn-sm" onClick={doDelete}>Yes, remove</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setDeleting(null)}>Cancel</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="helper" style={{ marginTop: 16 }}>
+        Resetting shows the new password once so you can tell the friend (e.g., over WhatsApp). The actual password is never stored in plain text — only a SHA-256 hash.
+      </div>
+    </div>
+  );
+}
+
+function GroupsAdmin({ state, updateState, showToast }) {
+  const [local, setLocal] = useState(state.groups || defaultGroups());
+
+  const update = (L, idx, val) => {
+    setLocal(g => ({ ...g, [L]: g[L].map((t,i) => i===idx ? val : t) }));
+  };
+  const save = async () => {
+    await updateState(s => ({ ...s, groups: local }));
+    showToast("Groups saved");
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        Group Stage Draw
+        <button className="btn btn-primary btn-sm" onClick={save}>Save Groups</button>
+      </div>
+      <p className="helper" style={{ marginBottom: 18 }}>
+        Enter all 4 teams for each of the 12 groups (A–L) of the WC2026 draw. These appear in everyone's predictions.
+      </p>
+      <div className="grid grid-2">
+        {GROUP_LETTERS.map(L => (
+          <div className="group-edit" key={L}>
+            <div className="group-edit-head"><strong>{L}</strong><span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>GROUP {L}</span></div>
+            <div className="group-edit-row">
+              {[0,1,2,3].map(i => (
+                <input
+                  key={i}
+                  type="text"
+                  placeholder={`Team ${i+1}`}
+                  value={local[L][i] || ""}
+                  onChange={e => update(L, i, e.target.value)}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FixturesAdmin({ state, updateState, showToast }) {
+  const [round, setRound] = useState("r32");
+  const fixtures = (state.fixtures[round] || []);
+
+  const add = async () => {
+    const newF = { id: `${round}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, team1: "", team2: "" };
+    await updateState(s => ({ ...s, fixtures: { ...s.fixtures, [round]: [...(s.fixtures[round]||[]), newF] } }));
+  };
+  const update = async (id, key, val) => {
+    await updateState(s => ({
+      ...s,
+      fixtures: { ...s.fixtures, [round]: s.fixtures[round].map(f => f.id === id ? { ...f, [key]: val } : f) }
+    }));
+  };
+  const remove = async (id) => {
+    await updateState(s => ({
+      ...s,
+      fixtures: { ...s.fixtures, [round]: s.fixtures[round].filter(f => f.id !== id) },
+      results: { ...s.results, [round]: Object.fromEntries(Object.entries(s.results[round]||{}).filter(([k]) => k !== id)) }
+    }));
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title">
+        Knockout Fixtures
+        <select value={round} onChange={e => setRound(e.target.value)} style={{ padding: 8, background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--ink)', fontSize: 13 }}>
+          {KO_ROUNDS.map(r => <option key={r} value={r}>{PHASE_LABELS[r]}</option>)}
+        </select>
+      </div>
+      <p className="helper" style={{ marginBottom: 18 }}>
+        Add fixtures after the previous round finishes. R32 = 16 matches, R16 = 8, QF = 4, SF = 2, Final = 1.
+      </p>
+      {fixtures.length === 0 ? (
+        <div className="empty"><div className="empty-title">NO FIXTURES</div><p>Add fixtures below.</p></div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {fixtures.map((f, idx) => (
+            <div key={f.id} style={{ display: 'grid', gridTemplateColumns: '50px 1fr 1fr auto', gap: 8, alignItems: 'center', background: 'var(--bg-2)', padding: 10 }}>
+              <span style={{ fontFamily: 'Anton', letterSpacing: '0.05em', color: 'var(--ink-mute)' }}>M{f.num || idx+1}</span>
+              <input type="text" placeholder="Team 1" value={f.team1} onChange={e => update(f.id, "team1", e.target.value)} style={{ padding: 8, background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)' }} />
+              <input type="text" placeholder="Team 2" value={f.team2} onChange={e => update(f.id, "team2", e.target.value)} style={{ padding: 8, background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)' }} />
+              <button className="btn btn-danger btn-sm" onClick={() => remove(f.id)}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button className="btn btn-primary btn-sm" onClick={add}>+ Add fixture</button>
+    </div>
+  );
+}
+
+function ResultsAdmin({ state, updateState, showToast }) {
+  const [section, setSection] = useState("group");
+  return (
+    <div className="card">
+      <div className="card-title">
+        Enter Actual Results
+        <select value={section} onChange={e => setSection(e.target.value)} style={{ padding: 8, background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--ink)', fontSize: 13 }}>
+          <option value="group">Group Stage</option>
+          <option value="r32">R32</option>
+          <option value="r16">R16</option>
+          <option value="qf">QF</option>
+          <option value="sf">SF</option>
+          <option value="final">Final</option>
+        </select>
+      </div>
+      {section === "group" ? <GroupResults state={state} updateState={updateState} /> : <KOResults state={state} updateState={updateState} round={section} />}
+    </div>
+  );
+}
+
+function GroupResults({ state, updateState }) {
+  const [winners, setWinners] = useState(state.results.groupWinners || {});
+  const [thirds, setThirds] = useState((state.results.thirdsAdvancing || []).join(", "));
+  const allTeams = getAllTeams(state);
+
+  const save = async () => {
+    const thirdsArr = thirds.split(",").map(s => s.trim()).filter(Boolean);
+    await updateState(s => ({ ...s, results: { ...s.results, groupWinners: winners, thirdsAdvancing: thirdsArr } }));
+  };
+
+  return (
+    <div>
+      <p className="helper" style={{ marginBottom: 16 }}>Pick the actual winner of each group and list the 8 third-placed teams that advanced.</p>
+      <div className="grid grid-3" style={{ marginBottom: 18 }}>
+        {GROUP_LETTERS.map(L => (
+          <div key={L} className="group-edit">
+            <div className="group-edit-head"><strong>{L}</strong><span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)' }}>WINNER</span></div>
+            <select
+              value={winners[L] || ""}
+              onChange={e => setWinners({ ...winners, [L]: e.target.value })}
+              style={{ width: '100%', padding: 8, background: 'var(--card)', border: '1px solid var(--line)', color: 'var(--ink)', fontSize: 13 }}
+            >
+              <option value="">— pick —</option>
+              {(state.groups[L]||[]).filter(t => t && t.trim()).map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      <div className="field">
+        <label>8 best third-placed teams (comma separated)</label>
+        <input type="text" value={thirds} onChange={e => setThirds(e.target.value)} placeholder="e.g. Croatia, Senegal, Mexico, …" />
+        <div className="helper">All names should exactly match how they appear in the group draw above.</div>
+      </div>
+      <button className="btn btn-primary" onClick={save}>Save group results</button>
+    </div>
+  );
+}
+
+function KOResults({ state, updateState, round }) {
+  const fixtures = state.fixtures[round] || [];
+  const results = state.results[round] || {};
+  const wantScore = round !== "r32";
+
+  const setResult = async (mid, key, val) => {
+    await updateState(s => ({
+      ...s,
+      results: { ...s.results, [round]: { ...(s.results[round]||{}), [mid]: { ...((s.results[round]||{})[mid]||{}), [key]: val } } }
+    }));
+  };
+
+  if (fixtures.length === 0) {
+    return <div className="empty"><div className="empty-title">NO FIXTURES</div><p>Add {PHASE_LABELS[round]} fixtures first.</p></div>;
+  }
+
+  return (
+    <div>
+      <p className="helper" style={{ marginBottom: 16 }}>Mark the actual winner{wantScore ? " and the exact final score" : ""} for each match.</p>
+      <div className="grid grid-2">
+        {fixtures.map((f, idx) => {
+          const r = results[f.id] || {};
+          return (
+            <div key={f.id} className="match-card">
+              <div className="match-num">{f.label || `M${f.num || idx+1}`} · {f.team1} vs {f.team2}</div>
+              <div className="match-teams">
+                {[f.team1, f.team2].map(t => (
+                  <div key={t} className={"team-pick" + (r.winner === t ? " selected" : "")} onClick={() => setResult(f.id, "winner", t)}>{t}</div>
+                ))}
+              </div>
+              {wantScore && (
+                <div className="score-row">
+                  <input type="number" min="0" placeholder="0" value={(r.score||"").split("-")[0] || ""} onChange={e => {
+                    const v = e.target.value.replace(/[^0-9]/g, "");
+                    const cur = (r.score || "").split("-");
+                    setResult(f.id, "score", `${v}-${cur[1]||""}`);
+                  }} />
+                  <span className="score-dash">–</span>
+                  <input type="number" min="0" placeholder="0" value={(r.score||"").split("-")[1] || ""} onChange={e => {
+                    const v = e.target.value.replace(/[^0-9]/g, "");
+                    const cur = (r.score || "").split("-");
+                    setResult(f.id, "score", `${cur[0]||""}-${v}`);
+                  }} />
+                </div>
+              )}
+              <button className="btn btn-ghost btn-sm" style={{ marginTop: 10 }} onClick={() => setResult(f.id, "winner", "")}>Clear winner</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BonusAdmin({ state, updateState, showToast }) {
+  const questions = state.bonus || [];
+  const [draft, setDraft] = useState({ q: "", type: "text", options: "", answer: "", points: state.scoring.bonus });
+
+  const add = async () => {
+    if (!draft.q.trim()) { showToast("Question required"); return; }
+    const q = {
+      id: "b_" + Date.now() + "_" + Math.random().toString(36).slice(2,5),
+      q: draft.q.trim(),
+      type: draft.type,
+      options: draft.type === "select" ? draft.options.split(",").map(s => s.trim()).filter(Boolean) : [],
+      answer: draft.answer.trim(),
+      points: parseInt(draft.points) || state.scoring.bonus,
+      locked: false
+    };
+    await updateState(s => ({ ...s, bonus: [...(s.bonus||[]), q] }));
+    setDraft({ q: "", type: "text", options: "", answer: "", points: state.scoring.bonus });
+    showToast("Bonus question added");
+  };
+
+  const update = async (id, key, val) => {
+    await updateState(s => ({
+      ...s,
+      bonus: s.bonus.map(q => q.id === id ? { ...q, [key]: val } : q)
+    }));
+  };
+  const remove = async (id) => {
+    await updateState(s => ({ ...s, bonus: s.bonus.filter(q => q.id !== id) }));
+  };
+
+  return (
+    <div>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card-title">Add Bonus Question</div>
+        <div className="field">
+          <label>Question</label>
+          <input type="text" placeholder="e.g. Who wins the Golden Ball?" value={draft.q} onChange={e => setDraft({...draft, q: e.target.value})} />
+        </div>
+        <div className="grid grid-2">
+          <div className="field">
+            <label>Type</label>
+            <select value={draft.type} onChange={e => setDraft({...draft, type: e.target.value})}>
+              <option value="text">Text answer</option>
+              <option value="select">Multiple choice</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>Points</label>
+            <input type="number" min="1" value={draft.points} onChange={e => setDraft({...draft, points: e.target.value})} />
+          </div>
+        </div>
+        {draft.type === "select" && (
+          <div className="field">
+            <label>Options (comma separated)</label>
+            <input type="text" placeholder="e.g. Messi, Mbappe, Bellingham, Vinicius" value={draft.options} onChange={e => setDraft({...draft, options: e.target.value})} />
+          </div>
+        )}
+        <div className="field">
+          <label>Correct answer (optional, can fill later)</label>
+          <input type="text" value={draft.answer} onChange={e => setDraft({...draft, answer: e.target.value})} />
+        </div>
+        <button className="btn btn-primary" onClick={add}>+ Add question</button>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Existing Questions ({questions.length})</div>
+        {questions.length === 0 ? <div className="empty"><div className="empty-title">NO QUESTIONS</div></div> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {questions.map(q => (
+              <div key={q.id} style={{ background: 'var(--bg-2)', padding: 14, border: '1px solid var(--line)' }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>{q.q}</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, fontFamily: 'JetBrains Mono', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                  <span>{q.type.toUpperCase()}</span><span>·</span>
+                  <span>{q.points} PTS</span><span>·</span>
+                  <span>{q.locked ? "🔒 LOCKED" : "OPEN"}</span>
+                  {q.options.length > 0 && <><span>·</span><span>{q.options.length} OPTIONS</span></>}
+                </div>
+                <div className="field" style={{ marginBottom: 8 }}>
+                  <label>Correct answer</label>
+                  <input type="text" value={q.answer || ""} onChange={e => update(q.id, "answer", e.target.value)} placeholder="Leave blank until decided" />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => update(q.id, "locked", !q.locked)}>
+                    {q.locked ? "Unlock" : "Lock"}
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={() => remove(q.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScoringAdmin({ state, updateState, showToast }) {
+  const [s, setS] = useState(state.scoring || DEFAULT_SCORING);
+  const save = async () => {
+    await updateState(st => ({ ...st, scoring: { ...s, groupWinner: +s.groupWinner, thirdPlaced: +s.thirdPlaced, r32: +s.r32, r16: +s.r16, r16Score: +s.r16Score, qf: +s.qf, qfScore: +s.qfScore, sf: +s.sf, sfScore: +s.sfScore, final: +s.final, finalScore: +s.finalScore, bonus: +s.bonus } }));
+    showToast("Scoring saved");
+  };
+  return (
+    <div className="card">
+      <div className="card-title">Scoring Configuration <button className="btn btn-primary btn-sm" onClick={save}>Save</button></div>
+      <div className="grid grid-3">
+        {[
+          ["groupWinner","Group winner"],
+          ["thirdPlaced","Third placed (each)"],
+          ["r32","R32 winner"],
+          ["r16","R16 winner"],
+          ["r16Score","R16 exact score"],
+          ["qf","QF winner"],
+          ["qfScore","QF exact score"],
+          ["sf","SF winner"],
+          ["sfScore","SF exact score"],
+          ["final","Final winner"],
+          ["finalScore","Final exact score"],
+          ["bonus","Bonus question (default)"]
+        ].map(([k,l]) => (
+          <div key={k} className="field">
+            <label>{l}</label>
+            <input type="number" value={s[k]} onChange={e => setS({...s, [k]: e.target.value})} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DangerAdmin({ onRefresh, showToast }) {
+  const [confirm, setConfirm] = useState(false);
+
+  const wipeAll = async () => {
+    await remoteWipePrefix("wc26_");
+    const keys = await listShared("wc26_");
+    for (const k of keys) {
+      localStorage.removeItem(k);
+    }
+    Object.keys(localStorage).filter(k => k.startsWith("wc26_")).forEach(k => localStorage.removeItem(k));
+    showToast("All data wiped");
+    await onRefresh();
+    setConfirm(false);
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title" style={{ color: 'var(--red)' }}>Danger Zone</div>
+      <p className="helper" style={{ marginBottom: 16 }}>
+        Wipe ALL league data — every prediction, every result, the groups, everything. Cannot be undone.
+      </p>
+      {confirm ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-danger" onClick={wipeAll}>Yes — wipe everything</button>
+          <button className="btn btn-ghost" onClick={() => setConfirm(false)}>Cancel</button>
+        </div>
+      ) : (
+        <button className="btn btn-danger" onClick={() => setConfirm(true)}>Reset entire league</button>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// MOUNT
+// ============================================================
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
