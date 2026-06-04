@@ -1055,7 +1055,7 @@ function App() {
         {view==="admin" && <AdminView state={state} users={users} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} showToast={showToast} onRefresh={refreshAll} />}
 
         <footer className="app-footer">
-          Developed for <span className="accent">FIFA26</span> · By MM
+          Developed for <span className="accent">FIFA26</span>
           <div className="copyright">© {new Date().getFullYear()} PANENKA™ · All Rights Reserved</div>
         </footer>
       </div>
@@ -1143,7 +1143,7 @@ function LoginView({ onLogin, remoteAvailable }) {
           <div className="eyebrow">FIFA WORLD CUP · USA · CANADA · MEXICO · 2026</div>
           <div className="login-title">PANEN<span className="it">ka.</span></div>
           <p className="login-sub">
-            {step === "name" && "The friends WC26 prediction league. Named after Antonín Panenka — the chipped penalty heard around the world, 1976. Same energy here: bold picks, big points, eternal bragging rights."}
+            {step === "name" && <>Named after Antonín Panenka's iconic 1976 penalty — the ultimate flex under pressure. Back your football instincts, outsmart your friends, and enjoy four years of bragging rights.<br/><br/>Make your picks. Beat your friends. Own the bragging rights.</>}
             {step === "signin" && <>Welcome back, <strong style={{ color: 'var(--accent)' }}>{cleanName}</strong>. Enter your password to access your predictions.</>}
             {step === "claim" && <>Looks like <strong style={{ color: 'var(--accent)' }}>{cleanName}</strong> exists from before passwords were required. Set one now to protect your picks.</>}
             {step === "signup" && <>New player. Welcome to PANENKA. Pick a password — you'll need it every time you sign in, and the admin can reset it if you forget.</>}
@@ -1242,7 +1242,7 @@ function LoginView({ onLogin, remoteAvailable }) {
           )}
 
           <div className="login-footer">
-            Developed for <span className="accent">FIFA26</span> · By MM
+            Developed for <span className="accent">FIFA26</span>
             <div>© {new Date().getFullYear()} PANENKA™ · All Rights Reserved</div>
           </div>
         </div>
