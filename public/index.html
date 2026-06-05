@@ -1044,6 +1044,7 @@ function App() {
           <button className={view==="home"?"active":""} onClick={()=>setView("home")}>Home</button>
           <button className={view==="predict"?"active":""} onClick={()=>setView("predict")}>Predict</button>
           <button className={view==="bonus"?"active":""} onClick={()=>setView("bonus")}>Bonus</button>
+          <button className={view==="picks"?"active":""} onClick={()=>setView("picks")}>Picks</button>
           <button className={view==="leaderboard"?"active":""} onClick={()=>setView("leaderboard")}>Leaderboard</button>
           <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>
         </nav>
@@ -1051,6 +1052,7 @@ function App() {
         {view==="home" && <HomeView state={state} user={user} myPred={myPredictions} users={users} onRefresh={refreshAll} setView={setView} />}
         {view==="predict" && <PredictView state={state} myPred={myPredictions} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
         {view==="bonus" && <BonusView state={state} myPred={myPredictions} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
+        {view==="picks" && <PicksView state={state} users={users} currentUser={user} />}
         {view==="leaderboard" && <LeaderboardView state={state} users={users} currentUser={user} />}
         {view==="admin" && <AdminView state={state} users={users} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} showToast={showToast} onRefresh={refreshAll} />}
 
@@ -1855,6 +1857,268 @@ function BonusView({ state, myPred, updateMyPredictions, showToast }) {
 // ============================================================
 // LEADERBOARD
 // ============================================================
+// ============================================================
+// PICKS VIEW — see everyone's predictions for locked rounds
+// ============================================================
+function PicksView({ state, users, currentUser }) {
+  const lockedRounds = useMemo(() => {
+    const out = [];
+    if (state.locks?.group) out.push('group');
+    ['r32', 'r16', 'qf', 'sf', 'final'].forEach(r => {
+      if (state.locks?.[r]) out.push(r);
+    });
+    const anyBonusLocked = (state.bonus || []).some(q => q.locked);
+    if (anyBonusLocked) out.push('bonus');
+    return out;
+  }, [state]);
+
+  const [round, setRound] = useState(() => lockedRounds[lockedRounds.length - 1] || null);
+
+  useEffect(() => {
+    if (lockedRounds.length === 0) { setRound(null); return; }
+    if (!round || !lockedRounds.includes(round)) {
+      setRound(lockedRounds[lockedRounds.length - 1]);
+    }
+  }, [lockedRounds, round]);
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">EVERYONE'S CARDS · ON THE TABLE</div>
+        <h1 className="page-title">SEE WHO<br/><span className="it">picked what.</span></h1>
+        <p className="page-sub">
+          Once a round is locked, predictions are frozen — and visible. See who backed the right horse, who blew it, and who needs to be roasted in the group chat.
+        </p>
+      </div>
+
+      {lockedRounds.length === 0 ? (
+        <div className="empty">
+          <div className="empty-title">NOTHING TO SEE YET</div>
+          <p>Once admin locks a round, picks for that round open up for everyone to compare.</p>
+        </div>
+      ) : (
+        <>
+          <div className="nav" style={{ marginBottom: 28 }}>
+            {lockedRounds.map(r => (
+              <button key={r} className={round === r ? "active" : ""} onClick={() => setRound(r)}>
+                {r === 'bonus' ? 'Bonus' : PHASE_LABELS[r]}
+              </button>
+            ))}
+          </div>
+
+          {round === 'group' && <GroupPicksGrid state={state} users={users} currentUser={currentUser} />}
+          {['r32', 'r16', 'qf', 'sf', 'final'].includes(round) && <KOPicksGrid state={state} users={users} currentUser={currentUser} round={round} />}
+          {round === 'bonus' && <BonusPicksGrid state={state} users={users} currentUser={currentUser} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+function GroupPicksGrid({ state, users, currentUser }) {
+  const actualWinners = state.results?.groupWinners || {};
+  const actualThirds = state.results?.thirdsAdvancing || [];
+  const sortedUsers = [...users].sort((a, b) => (a.joined || 0) - (b.joined || 0));
+
+  return (
+    <div>
+      <h3 style={{ fontFamily: 'Anton', fontSize: 22, letterSpacing: '0.04em', marginBottom: 16, color: 'var(--accent-2)' }}>
+        Group Winners
+      </h3>
+      <div className="grid grid-2" style={{ marginBottom: 32 }}>
+        {GROUP_LETTERS.map(L => {
+          const actual = actualWinners[L];
+          return (
+            <div key={L} className="card group-card">
+              <div className="group-head">
+                <span className="group-letter">GROUP {L}</span>
+                <span className="group-tag">
+                  {actual ? `WINNER · ${actual.toUpperCase()}` : "PICKS"}
+                </span>
+              </div>
+              {sortedUsers.map(u => {
+                const pick = u.groupWinners?.[L];
+                if (!pick) return null;
+                const correct = actual && pick === actual;
+                const wrong = actual && pick !== actual;
+                return (
+                  <div key={u.name} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '6px 8px', margin: '2px 0',
+                    background: u.name === currentUser ? 'var(--card-2)' : 'transparent',
+                    fontSize: 13
+                  }}>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                      {u.name.toUpperCase()}{u.name === currentUser ? ' · YOU' : ''}
+                    </span>
+                    <span style={{ color: correct ? 'var(--green)' : wrong ? 'var(--red)' : 'var(--ink)', fontWeight: correct ? 600 : 400 }}>
+                      {pick} {correct && '✓'}{wrong && ' ✗'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      <h3 style={{ fontFamily: 'Anton', fontSize: 22, letterSpacing: '0.04em', marginBottom: 16, color: 'var(--accent-2)' }}>
+        Third-Placed Picks
+      </h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {sortedUsers.map(u => {
+          const thirds = u.thirds || [];
+          if (thirds.length === 0) return null;
+          const hitCount = thirds.filter(t => actualThirds.includes(t)).length;
+          return (
+            <div key={u.name} className="card" style={{ padding: 14, background: u.name === currentUser ? 'var(--card-2)' : 'var(--card)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+                <div style={{ fontFamily: 'Anton', fontSize: 16, letterSpacing: '0.04em' }}>
+                  {u.name.toUpperCase()}{u.name === currentUser ? ' · YOU' : ''}
+                </div>
+                {actualThirds.length > 0 && (
+                  <div style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: 'var(--accent)', letterSpacing: '0.1em' }}>
+                    {hitCount}/{thirds.length} HIT
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {thirds.map(t => {
+                  const isActual = actualThirds.includes(t);
+                  const hasResults = actualThirds.length > 0;
+                  return (
+                    <span key={t} style={{
+                      padding: '4px 10px',
+                      border: '1px solid',
+                      borderColor: isActual ? 'var(--green)' : hasResults ? 'var(--red)' : 'var(--line)',
+                      color: isActual ? 'var(--green)' : hasResults ? 'var(--red)' : 'var(--ink)',
+                      fontSize: 12,
+                      background: 'var(--bg-2)'
+                    }}>
+                      {t}{isActual && ' ✓'}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function KOPicksGrid({ state, users, currentUser, round }) {
+  const fixtures = state.fixtures?.[round] || [];
+  const actuals = state.results?.[round] || {};
+  const sortedUsers = [...users].sort((a, b) => (a.joined || 0) - (b.joined || 0));
+  const wantScore = round !== 'r32';
+
+  if (fixtures.length === 0) {
+    return <div className="empty"><div className="empty-title">NO FIXTURES</div></div>;
+  }
+
+  return (
+    <div className="grid grid-2">
+      {fixtures.map((f, idx) => {
+        const actual = actuals[f.id];
+        const hasResult = !!actual?.winner;
+        return (
+          <div key={f.id} className="match-card">
+            <div className="match-num">
+              {f.label || `MATCH ${f.num || idx + 1}`} · {f.team1} vs {f.team2}
+            </div>
+            {hasResult && (
+              <div className="match-result-strip" style={{ marginTop: 4, marginBottom: 10 }}>
+                <span>ACTUAL · {actual.winner}{actual.score ? ` (${actual.score})` : ''}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {sortedUsers.map(u => {
+                const pick = u[round]?.[f.id];
+                if (!pick?.winner) return null;
+                const winnerCorrect = hasResult && pick.winner === actual.winner;
+                const scoreCorrect = wantScore && hasResult && actual.score && pick.score === actual.score;
+                return (
+                  <div key={u.name} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '6px 10px',
+                    background: u.name === currentUser ? 'var(--card-2)' : 'transparent',
+                    fontSize: 12
+                  }}>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                      {u.name.toUpperCase()}{u.name === currentUser ? ' · YOU' : ''}
+                    </span>
+                    <span style={{ color: winnerCorrect ? 'var(--green)' : hasResult ? 'var(--red)' : 'var(--ink)', fontWeight: winnerCorrect ? 600 : 400 }}>
+                      {pick.winner}
+                      {wantScore && pick.score && (
+                        <span style={{ fontFamily: 'JetBrains Mono', marginLeft: 6, fontSize: 11, color: scoreCorrect ? 'var(--green)' : 'var(--ink-mute)', fontWeight: scoreCorrect ? 700 : 400 }}>
+                          ({pick.score}){scoreCorrect && ' ✓'}
+                        </span>
+                      )}
+                      {winnerCorrect && !scoreCorrect && ' ✓'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BonusPicksGrid({ state, users, currentUser }) {
+  const bonusQs = (state.bonus || []).filter(q => q.locked);
+  const sortedUsers = [...users].sort((a, b) => (a.joined || 0) - (b.joined || 0));
+
+  if (bonusQs.length === 0) {
+    return <div className="empty"><div className="empty-title">NO LOCKED BONUS QUESTIONS</div></div>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {bonusQs.map(q => {
+        const hasAnswer = !!q.answer;
+        return (
+          <div key={q.id} className="card bonus-card">
+            <div className="bonus-q">{q.q}</div>
+            {hasAnswer && (
+              <div style={{ marginTop: 4, marginBottom: 14, fontSize: 11, fontFamily: 'JetBrains Mono', color: 'var(--green)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+                Correct: {q.answer}
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {sortedUsers.map(u => {
+                const ans = u.bonus?.[q.id];
+                if (!ans) return null;
+                const correct = hasAnswer && String(ans).trim().toLowerCase() === String(q.answer).trim().toLowerCase();
+                const wrong = hasAnswer && !correct;
+                return (
+                  <div key={u.name} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 12px',
+                    background: u.name === currentUser ? 'var(--card-2)' : 'var(--bg-2)',
+                    fontSize: 13
+                  }}>
+                    <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                      {u.name.toUpperCase()}{u.name === currentUser ? ' · YOU' : ''}
+                    </span>
+                    <span style={{ color: correct ? 'var(--green)' : wrong ? 'var(--red)' : 'var(--ink)', fontWeight: correct ? 600 : 400 }}>
+                      {ans}{correct && ' ✓'}{wrong && ' ✗'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function LeaderboardView({ state, users, currentUser }) {
   const ranked = useMemo(() => {
     return users.map(u => ({ name: u.name, ...calculateScore(u, state) }))
