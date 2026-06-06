@@ -637,6 +637,8 @@ const DEFAULT_SCORING = {
   sfScore: 3,
   final: 10,
   finalScore: 5,
+  bronze: 8,
+  bronzeScore: 3,
   bonus: 4,
   // Dark horse base points per round reached (cumulative when scored)
   darkHorse: { r32: 1, r16: 3, qf: 5, sf: 8, final: 10 }
@@ -889,7 +891,7 @@ function calculateScore(predictions, state, allUsers) {
   if (!predictions || !state) return { total: 0, breakdown: {} };
   const s = state.scoring || DEFAULT_SCORING;
   const r = state.results || {};
-  const b = { group: 0, r32: 0, r16: 0, qf: 0, sf: 0, final: 0, bonus: 0, darkHorse: 0 };
+  const b = { group: 0, r32: 0, r16: 0, qf: 0, sf: 0, final: 0, bronze: 0, bonus: 0, darkHorse: 0 };
 
   // Group winners
   const gw = predictions.groupWinners || {};
@@ -915,13 +917,17 @@ function calculateScore(predictions, state, allUsers) {
     Object.entries(userPicks).forEach(([mid, p]) => {
       const a = actuals[mid];
       if (!a) return;
+      // The bronze final (3rd-place playoff) scores on its own weights and bucket.
+      const isBronze = mid.indexOf("bronze") === 0;
+      const bucket = isBronze ? "bronze" : round;
+      const winKey = isBronze ? "bronze" : round;
+      const scoreKey = isBronze ? "bronzeScore" : (round + "Score");
       if (p.winner && a.winner && p.winner === a.winner) {
-        b[round] += s[round];
+        b[bucket] += (s[winKey] != null ? s[winKey] : s[round]);
       }
       if (round !== "r32") {
-        const scoreKey = round + "Score";
         if (p.score && a.score && p.score === a.score) {
-          b[round] += s[scoreKey];
+          b[bucket] += (s[scoreKey] != null ? s[scoreKey] : s[round + "Score"]);
         }
       }
     });
@@ -1067,6 +1073,11 @@ function App() {
       }
       if (!s.scoring) { s.scoring = { ...DEFAULT_SCORING }; needsSave = true; }
       if (!s.scoring.darkHorse) { s.scoring.darkHorse = { ...DEFAULT_SCORING.darkHorse }; needsSave = true; }
+      if (s.scoring && s.scoring.bronze === undefined) {
+        s.scoring.bronze = 8;
+        s.scoring.bronzeScore = 3;
+        needsSave = true;
+      }
       // One-time upgrade to escalating knockout weights + dark horse scoring
       if (!s._patches?.scoring_v2) {
         s.scoring = {
@@ -1602,6 +1613,7 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
             <li><span className="rule-name">Quarter-finals</span><span className="rule-points">{score.breakdown.qf||0}</span></li>
             <li><span className="rule-name">Semi-finals</span><span className="rule-points">{score.breakdown.sf||0}</span></li>
             <li><span className="rule-name">Final</span><span className="rule-points">{score.breakdown.final||0}</span></li>
+            <li><span className="rule-name">Bronze final</span><span className="rule-points">{score.breakdown.bronze||0}</span></li>
             <li><span className="rule-name">Bonus questions</span><span className="rule-points">{score.breakdown.bonus||0}</span></li>
             <li><span className="rule-name">Dark horses</span><span className="rule-points">{score.breakdown.darkHorse||0}</span></li>
           </ul>
@@ -1624,6 +1636,7 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
             <li><span className="rule-name">QF winner</span><span className="rule-points">{state.scoring.qf}</span></li>
             <li><span className="rule-name">SF winner</span><span className="rule-points">{state.scoring.sf}</span></li>
             <li><span className="rule-name">Final winner</span><span className="rule-points">{state.scoring.final}</span></li>
+            <li><span className="rule-name">Bronze final winner</span><span className="rule-points">{state.scoring.bronze ?? 8}</span></li>
             <li><span className="rule-name">Exact score (R16/QF/SF)</span><span className="rule-points">{state.scoring.r16Score}</span></li>
             <li><span className="rule-name">Exact score (Final)</span><span className="rule-points">{state.scoring.finalScore}</span></li>
             <li><span className="rule-name">Bonus question</span><span className="rule-points">{state.scoring.bonus}</span></li>
@@ -1918,7 +1931,12 @@ function KnockoutPredictView({ state, myPred, updateMyPredictions, showToast, ro
                   <div className="match-result-strip">
                     <span>ACTUAL · {a.winner}{a.score ? ` (${a.score})` : ""}</span>
                     <span className="pts-badge">
-                      +{(winnerCorrect ? state.scoring[round] : 0) + (wantScore && scoreCorrect ? state.scoring[round+"Score"] : 0)} pts
+                      +{(() => {
+                        const isBronze = String(f.id).indexOf("bronze") === 0;
+                        const winPts = isBronze ? (state.scoring.bronze != null ? state.scoring.bronze : state.scoring[round]) : state.scoring[round];
+                        const scorePts = isBronze ? (state.scoring.bronzeScore != null ? state.scoring.bronzeScore : state.scoring[round+"Score"]) : state.scoring[round+"Score"];
+                        return (winnerCorrect ? winPts : 0) + (wantScore && scoreCorrect ? scorePts : 0);
+                      })()} pts
                     </span>
                   </div>
                 )}
@@ -1958,7 +1976,7 @@ function BonusView({ state, myPred, updateMyPredictions, showToast }) {
       <div className="page-head">
         <div className="eyebrow">{state.scoring.bonus} POINTS · EACH</div>
         <h1 className="page-title">BONUS<br/><span className="it">questions.</span></h1>
-        <p className="page-sub">Player of the tournament, Golden Boot, Golden Glove and more.</p>
+        <p className="page-sub">Player of the tournament, Golden Boot, Golden Glove and more. Tiered questions let you rank your top 3 — get the right answer in 1st / 2nd / 3rd for 8 / 5 / 3 points.</p>
       </div>
 
       {questions.length === 0 ? (
@@ -2119,7 +2137,7 @@ function DarkHorseView({ state, myPred, users, updateMyPredictions, showToast })
         <div className="eyebrow">PHASE · UNDERDOGS</div>
         <h1 className="page-title">DARK<br/><span className="it">horses.</span></h1>
         <p className="page-sub">
-          Pick {DARK_HORSE_TOTAL} teams from outside the favourites. They score cumulative points the further they go — and the fewer friends who back them, the bigger the popularity bonus. Editable until the first game of R32.
+          Pick {DARK_HORSE_TOTAL} teams from outside the favourites. They score cumulative points the further they go — and the fewer friends who back them, the bigger the popularity bonus. Editable until the Round of 16 locks.
         </p>
       </div>
 
@@ -2554,6 +2572,7 @@ function LeaderboardView({ state, users, currentUser }) {
                         <span>QF <strong>{r.breakdown.qf||0}</strong></span>
                         <span>SF <strong>{r.breakdown.sf||0}</strong></span>
                         <span>FIN <strong>{r.breakdown.final||0}</strong></span>
+                        <span>BRZ <strong>{r.breakdown.bronze||0}</strong></span>
                         <span>BONUS <strong>{r.breakdown.bonus||0}</strong></span>
                         <span>DH <strong>{r.breakdown.darkHorse||0}</strong></span>
                       </div>
@@ -3193,7 +3212,7 @@ function ScoringAdmin({ state, updateState, showToast }) {
     await updateState(st => ({ ...st, scoring: {
       ...s,
       groupWinner: +s.groupWinner, thirdPlaced: +s.thirdPlaced, r32: +s.r32, r16: +s.r16, r16Score: +s.r16Score,
-      qf: +s.qf, qfScore: +s.qfScore, sf: +s.sf, sfScore: +s.sfScore, final: +s.final, finalScore: +s.finalScore, bonus: +s.bonus,
+      qf: +s.qf, qfScore: +s.qfScore, sf: +s.sf, sfScore: +s.sfScore, final: +s.final, finalScore: +s.finalScore, bronze: +s.bronze, bronzeScore: +s.bronzeScore, bonus: +s.bonus,
       darkHorse: { r32: +d.r32, r16: +d.r16, qf: +d.qf, sf: +d.sf, final: +d.final }
     } }));
     showToast("Scoring saved");
@@ -3214,6 +3233,8 @@ function ScoringAdmin({ state, updateState, showToast }) {
           ["sfScore","SF exact score"],
           ["final","Final winner"],
           ["finalScore","Final exact score"],
+          ["bronze","Bronze final winner (3rd place)"],
+          ["bronzeScore","Bronze final exact score"],
           ["bonus","Bonus question (default)"]
         ].map(([k,l]) => (
           <div key={k} className="field">
