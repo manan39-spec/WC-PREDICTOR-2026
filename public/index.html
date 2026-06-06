@@ -764,6 +764,7 @@ function defaultState() {
     results: {
       groupWinners: {}, // { A: "Spain", B: "..." }
       thirdsAdvancing: [], // ["Team1", ... up to 8]
+      r32Teams: [], // all 32 teams advancing to the Round of 32 (admin-entered)
       r32: {}, // { matchId: { winner: "X", score: "2-1" } }
       r16: {},
       qf: {},
@@ -881,9 +882,15 @@ function furthestRoundReached(team, state) {
   if (wonIn("qf")) return "sf";      // won a quarter → reached SF
   if (wonIn("r16")) return "qf";     // won R16 → reached QF
   if (wonIn("r32")) return "r16";    // won R32 → reached R16
+  // Reached R32: the admin's explicit list of all 32 advancing teams is the source of truth.
+  // Falls back to group winners + thirds (+ named R32 fixtures) if that list isn't filled in yet.
+  const r32Teams = r.r32Teams || [];
+  if (r32Teams.includes(team)) return "r32";
   const gw = Object.values(r.groupWinners || {});
   const thirds = r.thirdsAdvancing || [];
-  if (gw.includes(team) || thirds.includes(team)) return "r32"; // qualified into R32
+  if (gw.includes(team) || thirds.includes(team)) return "r32";
+  const fx = (state.fixtures && state.fixtures.r32) || [];
+  if (fx.some(f => f.team1 === team || f.team2 === team)) return "r32";
   return null;
 }
 
@@ -1076,6 +1083,10 @@ function App() {
       if (s.scoring && s.scoring.bronze === undefined) {
         s.scoring.bronze = 8;
         s.scoring.bronzeScore = 3;
+        needsSave = true;
+      }
+      if (s.results && s.results.r32Teams === undefined) {
+        s.results.r32Teams = [];
         needsSave = true;
       }
       // One-time upgrade to escalating knockout weights + dark horse scoring
@@ -2276,6 +2287,7 @@ function PicksView({ state, users, currentUser }) {
     });
     const anyBonusLocked = (state.bonus || []).some(q => q.locked);
     if (anyBonusLocked) out.push('bonus');
+    if (darkHorseLocked(state)) out.push('darkhorse');
     return out;
   }, [state]);
 
@@ -2308,7 +2320,7 @@ function PicksView({ state, users, currentUser }) {
           <div className="nav" style={{ marginBottom: 28 }}>
             {lockedRounds.map(r => (
               <button key={r} className={round === r ? "active" : ""} onClick={() => setRound(r)}>
-                {r === 'bonus' ? 'Bonus' : PHASE_LABELS[r]}
+                {r === 'bonus' ? 'Bonus' : r === 'darkhorse' ? 'Dark Horses' : PHASE_LABELS[r]}
               </button>
             ))}
           </div>
@@ -2316,6 +2328,7 @@ function PicksView({ state, users, currentUser }) {
           {round === 'group' && <GroupPicksGrid state={state} users={users} currentUser={currentUser} />}
           {['r32', 'r16', 'qf', 'sf', 'final'].includes(round) && <KOPicksGrid state={state} users={users} currentUser={currentUser} round={round} />}
           {round === 'bonus' && <BonusPicksGrid state={state} users={users} currentUser={currentUser} />}
+          {round === 'darkhorse' && <DarkHorsePicksGrid state={state} users={users} currentUser={currentUser} />}
         </>
       )}
     </div>
@@ -2522,6 +2535,83 @@ function BonusPicksGrid({ state, users, currentUser }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function DarkHorsePicksGrid({ state, users, currentUser }) {
+  const sortedUsers = [...users].sort((a, b) => (a.joined || 0) - (b.joined || 0));
+  const { counts, totalPickers } = darkHorsePickStats(users);
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+  const pickerCount = sortedUsers.filter(u => (u.darkHorses || []).length > 0).length;
+  if (pickerCount === 0) {
+    return <div className="empty"><div className="empty-title">NO DARK HORSES PICKED</div><p>Nobody locked in dark horse picks.</p></div>;
+  }
+
+  return (
+    <div>
+      {/* Popularity summary */}
+      <h3 style={{ fontFamily: 'Anton', fontSize: 22, letterSpacing: '0.04em', marginBottom: 6, color: 'var(--accent-2)' }}>
+        Most Popular Dark Horses
+      </h3>
+      <p className="helper" style={{ marginBottom: 16 }}>
+        How often each team was picked across {totalPickers} player{totalPickers === 1 ? "" : "s"}. The less popular your pick, the bigger its popularity bonus if it goes deep.
+      </p>
+      <div className="card" style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {ranked.map(([team, n]) => {
+            const pct = totalPickers > 0 ? Math.round((n / totalPickers) * 100) : 0;
+            // color bands mirror the popularity multiplier tiers
+            const band = pct < 25 ? 'var(--green)' : pct < 50 ? 'var(--accent-2)' : pct < 75 ? 'var(--accent)' : 'var(--ink-mute)';
+            return (
+              <div key={team} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ minWidth: 150, fontSize: 13 }}>{team}</span>
+                <div style={{ flex: 1, height: 10, background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
+                  <div style={{ width: pct + "%", height: '100%', background: band }}></div>
+                </div>
+                <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: 'var(--ink-dim)', minWidth: 78, textAlign: 'right' }}>{n} · {pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Each player's picks */}
+      <h3 style={{ fontFamily: 'Anton', fontSize: 22, letterSpacing: '0.04em', marginBottom: 16, color: 'var(--accent-2)' }}>
+        Everyone's Dark Horses
+      </h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {sortedUsers.map(u => {
+          const picks = u.darkHorses || [];
+          if (picks.length === 0) return null;
+          return (
+            <div key={u.name} className="card" style={{ padding: 14, background: u.name === currentUser ? 'var(--card-2)' : 'var(--card)' }}>
+              <div style={{ fontFamily: 'Anton', fontSize: 16, letterSpacing: '0.04em', marginBottom: 10 }}>
+                {u.name.toUpperCase()}{u.name === currentUser ? ' · YOU' : ''}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {picks.map(t => {
+                  const reached = furthestRoundReached(t, state);
+                  const out = reached === null && (state.results?.r32Teams || []).length > 0;
+                  return (
+                    <span key={t} style={{
+                      padding: '4px 10px',
+                      border: '1px solid',
+                      borderColor: reached ? 'var(--green)' : out ? 'var(--red)' : 'var(--line)',
+                      color: reached ? 'var(--green)' : out ? 'var(--red)' : 'var(--ink)',
+                      fontSize: 12,
+                      background: 'var(--bg-2)'
+                    }}>
+                      {t}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2942,12 +3032,24 @@ function ResultsAdmin({ state, updateState, showToast }) {
 function GroupResults({ state, updateState }) {
   const [winners, setWinners] = useState(state.results.groupWinners || {});
   const [thirds, setThirds] = useState((state.results.thirdsAdvancing || []).join(", "));
+  const [r32Teams, setR32Teams] = useState((state.results.r32Teams || []).join(", "));
   const allTeams = getAllTeams(state);
 
   const save = async () => {
     const thirdsArr = thirds.split(",").map(s => s.trim()).filter(Boolean);
-    await updateState(s => ({ ...s, results: { ...s.results, groupWinners: winners, thirdsAdvancing: thirdsArr } }));
+    const r32Arr = r32Teams.split(",").map(s => s.trim()).filter(Boolean);
+    await updateState(s => ({ ...s, results: { ...s.results, groupWinners: winners, thirdsAdvancing: thirdsArr, r32Teams: r32Arr } }));
   };
+
+  // Helper: seed the 32-team box with the 12 group winners + 8 thirds (admin adds the 12 runners-up).
+  const autofillFromKnown = () => {
+    const w = GROUP_LETTERS.map(L => winners[L]).filter(Boolean);
+    const t = thirds.split(",").map(s => s.trim()).filter(Boolean);
+    const merged = [...new Set([...w, ...t])];
+    setR32Teams(merged.join(", "));
+  };
+
+  const r32Count = r32Teams.split(",").map(s => s.trim()).filter(Boolean).length;
 
   return (
     <div>
@@ -2972,6 +3074,24 @@ function GroupResults({ state, updateState }) {
         <input type="text" value={thirds} onChange={e => setThirds(e.target.value)} placeholder="e.g. Croatia, Senegal, Mexico, …" />
         <div className="helper">All names should exactly match how they appear in the group draw above.</div>
       </div>
+
+      <div className="field" style={{ marginTop: 8 }}>
+        <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>All 32 teams advancing to the Round of 32 (comma separated) · {r32Count}/32</span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={autofillFromKnown}>Auto-fill winners + thirds</button>
+        </label>
+        <textarea
+          value={r32Teams}
+          onChange={e => setR32Teams(e.target.value)}
+          rows={3}
+          placeholder="All 32 qualifiers: the 12 group winners, 12 runners-up, and 8 best third-placed teams. e.g. Spain, Argentina, Brazil, France, …"
+          style={{ width: '100%', padding: 12, background: 'var(--bg-2)', border: '1px solid var(--line)', color: 'var(--ink)', fontSize: 14, fontFamily: 'inherit', resize: 'vertical' }}
+        />
+        <div className="helper">
+          This is what dark horse scoring uses to know who reached the Round of 32 (it captures group runners-up, which the winners/thirds lists don't). Names must match the group draw exactly. Tip: hit "Auto-fill winners + thirds" to seed 20 of them, then add the 12 runners-up.
+        </div>
+      </div>
+
       <button className="btn btn-primary" onClick={save}>Save group results</button>
     </div>
   );
