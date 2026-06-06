@@ -631,13 +631,15 @@ const DEFAULT_SCORING = {
   r32: 2,
   r16: 3,
   r16Score: 3,
-  qf: 3,
+  qf: 5,
   qfScore: 3,
-  sf: 3,
+  sf: 7,
   sfScore: 3,
-  final: 3,
-  finalScore: 3,
-  bonus: 4
+  final: 10,
+  finalScore: 5,
+  bonus: 4,
+  // Dark horse base points per round reached (cumulative when scored)
+  darkHorse: { r32: 1, r16: 3, qf: 5, sf: 8, final: 10 }
 };
 
 // Official FIFA WC2026 draw — verified from FIFA group tables.
@@ -656,6 +658,47 @@ function defaultGroups() {
     K: ["Portugal", "DR Congo", "Uzbekistan", "Colombia"],
     L: ["England", "Croatia", "Ghana", "Panama"]
   };
+}
+
+// ============================================================
+// DARK HORSE CONFIG
+// ============================================================
+// The 6 highest-ranked teams are excluded from dark horse picks. Edit freely.
+const DARK_HORSE_EXCLUDED = ["Spain", "France", "England", "Brazil", "Argentina", "Portugal"];
+
+// Region buckets for the dark horse quota. Each of the 48 teams maps to one of:
+//   "SACONC" = South America or CONCACAF (N/Central America & Caribbean)
+//   "EUASIA" = Europe or Asia
+//   "AFRICA" = Africa
+// Note: New Zealand is OFC/Oceania with no dedicated bucket — assigned to EUASIA here.
+// Change any mapping below if you prefer a different split.
+const TEAM_REGIONS = {
+  // SACONC — South America + CONCACAF
+  "Mexico": "SACONC", "Canada": "SACONC", "United States": "SACONC", "Haiti": "SACONC",
+  "Curaçao": "SACONC", "Panama": "SACONC", "Brazil": "SACONC", "Paraguay": "SACONC",
+  "Ecuador": "SACONC", "Uruguay": "SACONC", "Argentina": "SACONC", "Colombia": "SACONC",
+  // AFRICA
+  "South Africa": "AFRICA", "Morocco": "AFRICA", "Ivory Coast": "AFRICA", "Tunisia": "AFRICA",
+  "Egypt": "AFRICA", "Cape Verde": "AFRICA", "Senegal": "AFRICA", "Algeria": "AFRICA",
+  "DR Congo": "AFRICA", "Ghana": "AFRICA",
+  // EUASIA — Europe + Asia (+ New Zealand)
+  "South Korea": "EUASIA", "Czech Republic": "EUASIA", "Bosnia and Herzegovina": "EUASIA",
+  "Qatar": "EUASIA", "Switzerland": "EUASIA", "Scotland": "EUASIA", "Australia": "EUASIA",
+  "Turkey": "EUASIA", "Germany": "EUASIA", "Netherlands": "EUASIA", "Japan": "EUASIA",
+  "Sweden": "EUASIA", "Belgium": "EUASIA", "Iran": "EUASIA", "New Zealand": "EUASIA",
+  "Spain": "EUASIA", "Saudi Arabia": "EUASIA", "France": "EUASIA", "Iraq": "EUASIA",
+  "Norway": "EUASIA", "Austria": "EUASIA", "Jordan": "EUASIA", "Portugal": "EUASIA",
+  "Uzbekistan": "EUASIA", "England": "EUASIA", "Croatia": "EUASIA"
+};
+
+// Dark horse quota: how many picks required per region (total must equal 7)
+const DARK_HORSE_QUOTA = { SACONC: 2, EUASIA: 3, AFRICA: 2 };
+const DARK_HORSE_TOTAL = 7;
+const REGION_LABELS = { SACONC: "S. America / CONCACAF", EUASIA: "Europe / Asia", AFRICA: "Africa" };
+
+// Dark horse + tiered bonus picks lock when their own lock is set OR when R16 locks.
+function darkHorseLocked(state) {
+  return !!(state?.locks && (state.locks.darkHorse || state.locks.r16));
 }
 
 const BRACKET_VERSION = 3; // bump to force fixture regeneration on existing state
@@ -714,7 +757,7 @@ function defaultState() {
   return {
     phase: "setup",
     templateVersion: BRACKET_VERSION,
-    locks: { group: false, r32: false, r16: false, qf: false, sf: false, final: false },
+    locks: { group: false, r32: false, r16: false, qf: false, sf: false, final: false, darkHorse: false },
     groups: defaultGroups(),
     results: {
       groupWinners: {}, // { A: "Spain", B: "..." }
@@ -818,18 +861,35 @@ async function makeUserRecord(name, password) {
     groupWinners: {},
     thirds: [],
     r32: {}, r16: {}, qf: {}, sf: {}, final: {},
-    bonus: {}
+    bonus: {},
+    darkHorses: []
   };
 }
 
 // ============================================================
 // SCORING ENGINE
 // ============================================================
-function calculateScore(predictions, state) {
+// Returns the furthest round a team reached: null | "r32" | "r16" | "qf" | "sf" | "final"
+// Derived from existing results: group winners / thirds = reached R32; then trace KO winners.
+function furthestRoundReached(team, state) {
+  if (!team) return null;
+  const r = state.results || {};
+  const wonIn = (round) => Object.values(r[round] || {}).some(m => m && m.winner === team);
+  if (wonIn("sf")) return "final";   // won a semi-final → reached the Final
+  if (wonIn("qf")) return "sf";      // won a quarter → reached SF
+  if (wonIn("r16")) return "qf";     // won R16 → reached QF
+  if (wonIn("r32")) return "r16";    // won R32 → reached R16
+  const gw = Object.values(r.groupWinners || {});
+  const thirds = r.thirdsAdvancing || [];
+  if (gw.includes(team) || thirds.includes(team)) return "r32"; // qualified into R32
+  return null;
+}
+
+function calculateScore(predictions, state, allUsers) {
   if (!predictions || !state) return { total: 0, breakdown: {} };
   const s = state.scoring || DEFAULT_SCORING;
   const r = state.results || {};
-  const b = { group: 0, r32: 0, r16: 0, qf: 0, sf: 0, final: 0, bonus: 0 };
+  const b = { group: 0, r32: 0, r16: 0, qf: 0, sf: 0, final: 0, bonus: 0, darkHorse: 0 };
 
   // Group winners
   const gw = predictions.groupWinners || {};
@@ -867,18 +927,75 @@ function calculateScore(predictions, state) {
     });
   });
 
-  // Bonus
+  // Bonus (text / select / tiered)
   const bp = predictions.bonus || {};
   (state.bonus || []).forEach(q => {
     if (!q.answer) return;
     const userAns = bp[q.id];
-    if (userAns && String(userAns).trim().toLowerCase() === String(q.answer).trim().toLowerCase()) {
-      b.bonus += (q.points || s.bonus);
+    if (q.type === "tiered") {
+      const arr = Array.isArray(userAns) ? userAns : [];
+      const tierPoints = Array.isArray(q.tierPoints) ? q.tierPoints : [8, 5, 3];
+      const idx = arr.findIndex(a => a && String(a).trim().toLowerCase() === String(q.answer).trim().toLowerCase());
+      if (idx >= 0 && idx < tierPoints.length) {
+        b.bonus += (Number(tierPoints[idx]) || 0);
+      }
+    } else {
+      if (userAns && String(userAns).trim().toLowerCase() === String(q.answer).trim().toLowerCase()) {
+        b.bonus += (q.points || s.bonus);
+      }
+    }
+  });
+
+  // Dark horses — cumulative base by furthest round + popularity bonus (after lock)
+  const ROUND_SEQ = ["r32", "r16", "qf", "sf", "final"];
+  const dhScoring = s.darkHorse || DEFAULT_SCORING.darkHorse;
+  const myDH = predictions.darkHorses || [];
+  const locked = darkHorseLocked(state);
+  // popularity counts across all players (only meaningful once locked)
+  let pickCounts = {}, totalPickers = 0;
+  if (locked && Array.isArray(allUsers) && allUsers.length) {
+    allUsers.forEach(u => {
+      const arr = u.darkHorses || [];
+      if (arr.length) {
+        totalPickers += 1;
+        arr.forEach(t => { pickCounts[t] = (pickCounts[t] || 0) + 1; });
+      }
+    });
+  }
+  myDH.forEach(team => {
+    const reached = furthestRoundReached(team, state);
+    if (!reached) return;
+    const idx = ROUND_SEQ.indexOf(reached);
+    let base = 0;
+    for (let i = 0; i <= idx; i++) base += (Number(dhScoring[ROUND_SEQ[i]]) || 0);
+    b.darkHorse += base;
+    if (locked && totalPickers > 0) {
+      const pct = (pickCounts[team] || 0) / totalPickers;
+      let perRound = 0;
+      if (pct < 0.25) perRound = 3;
+      else if (pct < 0.50) perRound = 2;
+      else if (pct < 0.75) perRound = 1;
+      else perRound = 0;
+      const roundsAdvanced = idx + 1; // r32=1 … final=5
+      b.darkHorse += perRound * roundsAdvanced;
     }
   });
 
   const total = Object.values(b).reduce((a,c) => a+c, 0);
   return { total, breakdown: b };
+}
+
+// Pick-percentage map for dark horses across all players (0–1 per team).
+function darkHorsePickStats(allUsers) {
+  let counts = {}, totalPickers = 0;
+  (allUsers || []).forEach(u => {
+    const arr = u.darkHorses || [];
+    if (arr.length) {
+      totalPickers += 1;
+      arr.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+    }
+  });
+  return { counts, totalPickers };
 }
 
 function getAllTeams(state) {
@@ -942,6 +1059,28 @@ function App() {
         };
         needsSave = true;
       }
+
+      // --- Non-destructive field migrations (don't touch predictions/results) ---
+      if (s.locks && s.locks.darkHorse === undefined) {
+        s.locks.darkHorse = false;
+        needsSave = true;
+      }
+      if (!s.scoring) { s.scoring = { ...DEFAULT_SCORING }; needsSave = true; }
+      if (!s.scoring.darkHorse) { s.scoring.darkHorse = { ...DEFAULT_SCORING.darkHorse }; needsSave = true; }
+      // One-time upgrade to escalating knockout weights + dark horse scoring
+      if (!s._patches?.scoring_v2) {
+        s.scoring = {
+          ...s.scoring,
+          r16: 3, r16Score: 3,
+          qf: 5, qfScore: 3,
+          sf: 7, sfScore: 3,
+          final: 10, finalScore: 5,
+          darkHorse: { r32: 1, r16: 3, qf: 5, sf: 8, final: 10 }
+        };
+        s._patches = { ...(s._patches || {}), scoring_v2: true };
+        needsSave = true;
+      }
+
       if (needsSave) await setShared("wc26_state", s);
     }
     setState(s);
@@ -994,7 +1133,7 @@ function App() {
   const updateMyPredictions = useCallback(async (mutator) => {
     if (!user) return;
     let p = await getShared("wc26_pred:" + user);
-    if (!p) p = { name: user, joined: Date.now(), groupWinners: {}, thirds: [], r32:{},r16:{},qf:{},sf:{},final:{}, bonus: {} };
+    if (!p) p = { name: user, joined: Date.now(), groupWinners: {}, thirds: [], r32:{},r16:{},qf:{},sf:{},final:{}, bonus: {}, darkHorses: [] };
     const updated = mutator({ ...p });
     await setShared("wc26_pred:" + user, updated);
     setUsers(prev => {
@@ -1044,6 +1183,7 @@ function App() {
           <button className={view==="home"?"active":""} onClick={()=>setView("home")}>Home</button>
           <button className={view==="predict"?"active":""} onClick={()=>setView("predict")}>Predict</button>
           <button className={view==="bonus"?"active":""} onClick={()=>setView("bonus")}>Bonus</button>
+          <button className={view==="darkhorse"?"active":""} onClick={()=>setView("darkhorse")}>Dark Horses</button>
           <button className={view==="picks"?"active":""} onClick={()=>setView("picks")}>Picks</button>
           <button className={view==="leaderboard"?"active":""} onClick={()=>setView("leaderboard")}>Leaderboard</button>
           <button className={view==="admin"?"active":""} onClick={()=>setView("admin")}>Admin</button>
@@ -1052,6 +1192,7 @@ function App() {
         {view==="home" && <HomeView state={state} user={user} myPred={myPredictions} users={users} onRefresh={refreshAll} setView={setView} />}
         {view==="predict" && <PredictView state={state} myPred={myPredictions} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
         {view==="bonus" && <BonusView state={state} myPred={myPredictions} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
+        {view==="darkhorse" && <DarkHorseView state={state} myPred={myPredictions} users={users} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} />}
         {view==="leaderboard" && <LeaderboardView state={state} users={users} currentUser={user} />}
         {view==="admin" && <AdminView state={state} users={users} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} showToast={showToast} onRefresh={refreshAll} />}
@@ -1263,9 +1404,9 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
     return () => clearInterval(id);
   }, []);
 
-  const score = useMemo(() => myPred ? calculateScore(myPred, state) : { total: 0, breakdown: {} }, [myPred, state]);
+  const score = useMemo(() => myPred ? calculateScore(myPred, state, users) : { total: 0, breakdown: {} }, [myPred, state, users]);
   const allScores = useMemo(() => {
-    return users.map(u => ({ name: u.name, ...calculateScore(u, state) }))
+    return users.map(u => ({ name: u.name, ...calculateScore(u, state, users) }))
                 .sort((a,b) => b.total - a.total);
   }, [users, state]);
   const myRank = allScores.findIndex(s => s.name === user) + 1;
@@ -1462,6 +1603,7 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
             <li><span className="rule-name">Semi-finals</span><span className="rule-points">{score.breakdown.sf||0}</span></li>
             <li><span className="rule-name">Final</span><span className="rule-points">{score.breakdown.final||0}</span></li>
             <li><span className="rule-name">Bonus questions</span><span className="rule-points">{score.breakdown.bonus||0}</span></li>
+            <li><span className="rule-name">Dark horses</span><span className="rule-points">{score.breakdown.darkHorse||0}</span></li>
           </ul>
         </div>
       </div>
@@ -1478,9 +1620,14 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
           <ul className="rules-list compact">
             <li><span className="rule-name">Group winner / 3rd-placed team</span><span className="rule-points">{state.scoring.groupWinner}</span></li>
             <li><span className="rule-name">R32 winner</span><span className="rule-points">{state.scoring.r32}</span></li>
-            <li><span className="rule-name">R16 / QF / SF / Final winner</span><span className="rule-points">{state.scoring.r16}</span></li>
-            <li><span className="rule-name">R16+ exact score</span><span className="rule-points">{state.scoring.r16Score}</span></li>
+            <li><span className="rule-name">R16 winner</span><span className="rule-points">{state.scoring.r16}</span></li>
+            <li><span className="rule-name">QF winner</span><span className="rule-points">{state.scoring.qf}</span></li>
+            <li><span className="rule-name">SF winner</span><span className="rule-points">{state.scoring.sf}</span></li>
+            <li><span className="rule-name">Final winner</span><span className="rule-points">{state.scoring.final}</span></li>
+            <li><span className="rule-name">Exact score (R16/QF/SF)</span><span className="rule-points">{state.scoring.r16Score}</span></li>
+            <li><span className="rule-name">Exact score (Final)</span><span className="rule-points">{state.scoring.finalScore}</span></li>
             <li><span className="rule-name">Bonus question</span><span className="rule-points">{state.scoring.bonus}</span></li>
+            <li><span className="rule-name">Dark horse (reaches Final, cumulative)</span><span className="rule-points">{((state.scoring.darkHorse?.r32||0)+(state.scoring.darkHorse?.r16||0)+(state.scoring.darkHorse?.qf||0)+(state.scoring.darkHorse?.sf||0)+(state.scoring.darkHorse?.final||0))}<small>max base</small></span></li>
           </ul>
         </div>
 
@@ -1508,10 +1655,13 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
             <strong style={{ color: 'var(--ink)'}}>2 · Group stage:</strong> Pick 12 group winners + 8 advancing third-placed teams. {state.scoring.groupWinner} point each.
           </p>
           <p style={{ marginBottom: 10 }}>
-            <strong style={{ color: 'var(--ink)'}}>3 · Knockouts unlock progressively:</strong> R32 ({state.scoring.r32}pts) → R16/QF/SF/F ({state.scoring.r16}pts winner + {state.scoring.r16Score}pts exact score).
+            <strong style={{ color: 'var(--ink)'}}>3 · Knockouts escalate:</strong> R32 ({state.scoring.r32}pts) → R16 ({state.scoring.r16}) → QF ({state.scoring.qf}) → SF ({state.scoring.sf}) → Final ({state.scoring.final}) per correct winner, plus exact-score bonuses ({state.scoring.r16Score}pts, {state.scoring.finalScore}pts for the final). The deeper the round, the bigger the points.
+          </p>
+          <p style={{ marginBottom: 10 }}>
+            <strong style={{ color: 'var(--ink)'}}>4 · Dark Horses:</strong> Pick 7 underdog teams. Earn cumulative points the further they go, with a popularity multiplier — the fewer friends who picked your horse, the more it pays off.
           </p>
           <p>
-            <strong style={{ color: 'var(--ink)'}}>4 · Bonus Qs throughout:</strong> Player of tournament, dark horses, top scorer — {state.scoring.bonus} points each.
+            <strong style={{ color: 'var(--ink)'}}>5 · Bonus Qs throughout:</strong> Golden Boot, Golden Glove, Player of the Tournament and more — including tiered questions where ranking your top 3 right pays 8 / 5 / 3 points.
           </p>
         </div>
       </div>
@@ -1788,10 +1938,19 @@ function BonusView({ state, myPred, updateMyPredictions, showToast }) {
   if (!myPred) return null;
   const questions = state.bonus || [];
   const myAnswers = myPred.bonus || {};
+  const r16Locked = !!(state.locks && state.locks.r16);
 
   const setAnswer = (qid, val, locked) => {
     if (locked) { showToast("Question locked"); return; }
     updateMyPredictions(p => ({ ...p, bonus: { ...(p.bonus || {}), [qid]: val } }));
+  };
+
+  const setTier = (qid, slot, val, locked, prevArr) => {
+    if (locked) { showToast("Question locked"); return; }
+    const arr = Array.isArray(prevArr) ? [...prevArr] : ["", "", ""];
+    while (arr.length < 3) arr.push("");
+    arr[slot] = val;
+    updateMyPredictions(p => ({ ...p, bonus: { ...(p.bonus || {}), [qid]: arr } }));
   };
 
   return (
@@ -1799,7 +1958,7 @@ function BonusView({ state, myPred, updateMyPredictions, showToast }) {
       <div className="page-head">
         <div className="eyebrow">{state.scoring.bonus} POINTS · EACH</div>
         <h1 className="page-title">BONUS<br/><span className="it">questions.</span></h1>
-        <p className="page-sub">Player of the tournament, dark horses, biggest surprise — answer the random questions admin throws in. Worth {state.scoring.bonus} points each.</p>
+        <p className="page-sub">Player of the tournament, Golden Boot, Golden Glove and more. Tiered questions let you rank your top 3 — get the right answer in 1st / 2nd / 3rd for 8 / 5 / 3 points.</p>
       </div>
 
       {questions.length === 0 ? (
@@ -1810,15 +1969,54 @@ function BonusView({ state, myPred, updateMyPredictions, showToast }) {
       ) : (
         <div>
           {questions.map(q => {
-            const myAns = myAnswers[q.id] || "";
-            const locked = q.locked;
+            const isTiered = q.type === "tiered";
+            // Tiered questions also lock once R16 locks (progressive edit window)
+            const locked = isTiered ? (q.locked || r16Locked) : q.locked;
             const hasAnswer = !!q.answer;
+            const tierPoints = Array.isArray(q.tierPoints) ? q.tierPoints : [8, 5, 3];
+
             return (
               <div key={q.id} className="card bonus-card">
                 <div className="bonus-q">{q.q}</div>
-                {q.type === "select" && q.options && q.options.length > 0 ? (
+
+                {isTiered ? (
+                  (() => {
+                    const arr = Array.isArray(myAnswers[q.id]) ? myAnswers[q.id] : ["", "", ""];
+                    const slots = ["1st choice", "2nd choice", "3rd choice"];
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {slots.map((label, slot) => {
+                          const chosen = arr[slot] || "";
+                          const myCorrect = hasAnswer && chosen && String(chosen).trim().toLowerCase() === String(q.answer).trim().toLowerCase();
+                          return (
+                            <div key={slot} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                              <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.12em', minWidth: 90 }}>
+                                {label.toUpperCase()} · {tierPoints[slot] ?? 0}P
+                              </span>
+                              <select
+                                value={chosen}
+                                disabled={locked}
+                                onChange={e => setTier(q.id, slot, e.target.value, locked, arr)}
+                                style={{ flex: 1, padding: 10, background: 'var(--bg-2)', border: '1px solid ' + (myCorrect ? 'var(--green)' : 'var(--line)'), color: myCorrect ? 'var(--green)' : 'var(--ink)', fontSize: 14 }}
+                              >
+                                <option value="">— pick —</option>
+                                {(q.options || []).map(o => {
+                                  // prevent choosing the same option in another slot
+                                  const usedElsewhere = arr.some((a, i) => i !== slot && a === o);
+                                  return <option key={o} value={o} disabled={usedElsewhere}>{o}{usedElsewhere ? " (picked)" : ""}</option>;
+                                })}
+                              </select>
+                              {myCorrect && <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--green)', letterSpacing: '0.1em' }}>✓ HIT</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()
+                ) : q.type === "select" && q.options && q.options.length > 0 ? (
                   <div className="bonus-opts">
                     {q.options.map(o => {
+                      const myAns = myAnswers[q.id] || "";
                       let cls = "bonus-opt";
                       if (myAns === o) cls += " selected";
                       if (hasAnswer && myAns === o && o === q.answer) cls = "bonus-opt correct";
@@ -1835,20 +2033,211 @@ function BonusView({ state, myPred, updateMyPredictions, showToast }) {
                   <input
                     type="text"
                     className="bonus-text-in"
-                    value={myAns}
+                    value={myAnswers[q.id] || ""}
                     placeholder="Type your answer…"
                     disabled={locked}
                     onChange={e => setAnswer(q.id, e.target.value, locked)}
                   />
                 )}
+
                 <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', fontSize: 11, fontFamily: 'JetBrains Mono', letterSpacing: '0.1em', color: 'var(--ink-mute)' }}>
-                  <span>{(q.points || state.scoring.bonus)} PTS · {locked ? "🔒 LOCKED" : "OPEN"}</span>
+                  <span>
+                    {isTiered ? `TIERED ${tierPoints.join("/")} PTS` : `${(q.points || state.scoring.bonus)} PTS`} · {locked ? "🔒 LOCKED" : "OPEN"}
+                    {isTiered && r16Locked && !q.locked ? " (R16)" : ""}
+                  </span>
                   {hasAnswer && <span style={{ color: 'var(--green)' }}>ANSWER: {q.answer}</span>}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// DARK HORSE VIEW — pick 7 underdogs with regional quotas
+// ============================================================
+function DarkHorseView({ state, myPred, users, updateMyPredictions, showToast }) {
+  if (!myPred) return null;
+  const locked = darkHorseLocked(state);
+  const lockReason = state.locks?.darkHorse ? "locked by admin" : (state.locks?.r16 ? "locked when R16 started" : "");
+  const picks = myPred.darkHorses || [];
+
+  // Eligible teams = all teams minus excluded, grouped by region
+  const allTeams = getAllTeams(state).filter(t => !DARK_HORSE_EXCLUDED.includes(t));
+  const byRegion = { SACONC: [], EUASIA: [], AFRICA: [] };
+  allTeams.forEach(t => {
+    const reg = TEAM_REGIONS[t] || "EUASIA";
+    if (byRegion[reg]) byRegion[reg].push(t);
+  });
+
+  const countInRegion = (reg) => picks.filter(t => (TEAM_REGIONS[t] || "EUASIA") === reg).length;
+
+  const toggle = (team) => {
+    if (locked) { showToast("Dark horse picks are locked"); return; }
+    const reg = TEAM_REGIONS[team] || "EUASIA";
+    if (picks.includes(team)) {
+      updateMyPredictions(p => ({ ...p, darkHorses: (p.darkHorses || []).filter(t => t !== team) }));
+    } else {
+      if (countInRegion(reg) >= (DARK_HORSE_QUOTA[reg] || 0)) {
+        showToast(`${REGION_LABELS[reg]} is full (${DARK_HORSE_QUOTA[reg]} max)`);
+        return;
+      }
+      updateMyPredictions(p => ({ ...p, darkHorses: [...(p.darkHorses || []), team] }));
+    }
+  };
+
+  const complete = picks.length === DARK_HORSE_TOTAL &&
+    Object.keys(DARK_HORSE_QUOTA).every(reg => countInRegion(reg) === DARK_HORSE_QUOTA[reg]);
+
+  // Popularity stats (only meaningful once locked)
+  const { counts, totalPickers } = useMemo(() => darkHorsePickStats(users), [users]);
+  const dhScoring = state.scoring?.darkHorse || DEFAULT_SCORING.darkHorse;
+  const ROUND_SEQ = ["r32", "r16", "qf", "sf", "final"];
+  const ROUND_LABEL = { r32: "Round of 32", r16: "Round of 16", qf: "Quarter-final", sf: "Semi-final", final: "Final" };
+
+  const teamBreakdown = (team) => {
+    const reached = furthestRoundReached(team, state);
+    if (!reached) return { reached: null, base: 0, bonus: 0, total: 0, pct: null };
+    const idx = ROUND_SEQ.indexOf(reached);
+    let base = 0;
+    for (let i = 0; i <= idx; i++) base += (Number(dhScoring[ROUND_SEQ[i]]) || 0);
+    let bonus = 0, pct = null;
+    if (locked && totalPickers > 0) {
+      pct = (counts[team] || 0) / totalPickers;
+      let perRound = pct < 0.25 ? 3 : pct < 0.50 ? 2 : pct < 0.75 ? 1 : 0;
+      bonus = perRound * (idx + 1);
+    }
+    return { reached, base, bonus, total: base + bonus, pct };
+  };
+
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">PHASE · UNDERDOGS</div>
+        <h1 className="page-title">DARK<br/><span className="it">horses.</span></h1>
+        <p className="page-sub">
+          Pick {DARK_HORSE_TOTAL} teams from outside the favourites. They score cumulative points the further they go — and the fewer friends who back them, the bigger the popularity bonus. Editable until the Round of 16 locks.
+        </p>
+      </div>
+
+      {locked && (
+        <div className="lock-banner">
+          🔒 Dark horse picks are {lockReason}. Showing your picks and how they're scoring.
+        </div>
+      )}
+
+      {!locked && (
+        <div className="cta-card" style={{ borderColor: 'var(--accent-2)' }}>
+          <div>
+            <div className="cta-eyebrow">STRATEGY TIP</div>
+            <div className="cta-title" style={{ fontSize: 18 }}>Unpopular but dangerous</div>
+            <div className="cta-sub" style={{ textTransform: 'none', letterSpacing: 0, fontSize: 13, color: 'var(--ink-dim)' }}>
+              Pick teams underrated enough to be unpopular, but good enough to actually go deep — that's where the points are.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quota tracker */}
+      <div className="stat-row" style={{ marginBottom: 28 }}>
+        {Object.keys(DARK_HORSE_QUOTA).map(reg => {
+          const have = countInRegion(reg);
+          const need = DARK_HORSE_QUOTA[reg];
+          const full = have >= need;
+          return (
+            <div className="stat" key={reg}>
+              <div className="stat-label">{REGION_LABELS[reg]}</div>
+              <div className="stat-value" style={{ fontSize: 32, color: full ? 'var(--green)' : 'var(--accent)' }}>{have}/{need}</div>
+              <div className="stat-sub">{full ? "complete" : `${need - have} slot${need-have===1?"":"s"} left`}</div>
+            </div>
+          );
+        })}
+        <div className="stat">
+          <div className="stat-label">Total Picked</div>
+          <div className="stat-value" style={{ fontSize: 32, color: complete ? 'var(--green)' : 'var(--ink)' }}>{picks.length}/{DARK_HORSE_TOTAL}</div>
+          <div className="stat-sub">{complete ? "all set ✓" : "keep picking"}</div>
+        </div>
+      </div>
+
+      {/* RESULTS MODE (locked) */}
+      {locked ? (
+        picks.length === 0 ? (
+          <div className="empty"><div className="empty-title">NO DARK HORSES PICKED</div><p>You didn't lock in any dark horses before the deadline.</p></div>
+        ) : (
+          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+            <table className="lb-table">
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th>Pick %</th>
+                  <th>Furthest round</th>
+                  <th style={{ textAlign: 'right' }}>Base</th>
+                  <th style={{ textAlign: 'right' }}>Bonus</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {picks.map(team => {
+                  const bd = teamBreakdown(team);
+                  return (
+                    <tr key={team}>
+                      <td style={{ fontWeight: 600 }}>{team}</td>
+                      <td style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--ink-dim)' }}>
+                        {bd.pct === null ? "—" : `${Math.round(bd.pct * 100)}%`}
+                      </td>
+                      <td style={{ color: bd.reached ? 'var(--ink)' : 'var(--ink-mute)' }}>
+                        {bd.reached ? ROUND_LABEL[bd.reached] : "Not yet / eliminated"}
+                      </td>
+                      <td style={{ textAlign: 'right', fontFamily: 'JetBrains Mono' }}>{bd.base}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'JetBrains Mono', color: bd.bonus > 0 ? 'var(--accent-2)' : 'var(--ink-mute)' }}>+{bd.bonus}</td>
+                      <td className="lb-total" style={{ fontSize: 20 }}>{bd.total}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        /* SELECTION MODE */
+        allTeams.length === 0 ? (
+          <div className="empty"><div className="empty-title">NO TEAMS YET</div><p>Admin needs to set the group draw first.</p></div>
+        ) : (
+          <div>
+            {Object.keys(byRegion).map(reg => {
+              const full = countInRegion(reg) >= DARK_HORSE_QUOTA[reg];
+              return (
+                <div key={reg} style={{ marginBottom: 28 }}>
+                  <h3 style={{ fontFamily: 'Anton', fontSize: 22, letterSpacing: '0.04em', marginBottom: 14, color: 'var(--accent-2)' }}>
+                    {REGION_LABELS[reg]} <span style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: full ? 'var(--green)' : 'var(--ink-mute)', letterSpacing: '0.15em' }}>· {countInRegion(reg)}/{DARK_HORSE_QUOTA[reg]} picked</span>
+                  </h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {byRegion[reg].map(team => {
+                      const picked = picks.includes(team);
+                      const disabled = !picked && full;
+                      return (
+                        <div
+                          key={team}
+                          className={"team-pick" + (picked ? " selected" : "")}
+                          onClick={() => toggle(team)}
+                          style={{ minWidth: 130, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1 }}
+                        >
+                          {team}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            <p className="helper" style={{ marginTop: 8 }}>
+              Excluded (too strong to be a dark horse): {DARK_HORSE_EXCLUDED.join(", ")}.
+            </p>
+          </div>
+        )
       )}
     </div>
   );
@@ -2121,7 +2510,7 @@ function BonusPicksGrid({ state, users, currentUser }) {
 
 function LeaderboardView({ state, users, currentUser }) {
   const ranked = useMemo(() => {
-    return users.map(u => ({ name: u.name, ...calculateScore(u, state) }))
+    return users.map(u => ({ name: u.name, ...calculateScore(u, state, users) }))
                 .sort((a,b) => b.total - a.total);
   }, [users, state]);
 
@@ -2166,6 +2555,7 @@ function LeaderboardView({ state, users, currentUser }) {
                         <span>SF <strong>{r.breakdown.sf||0}</strong></span>
                         <span>FIN <strong>{r.breakdown.final||0}</strong></span>
                         <span>BONUS <strong>{r.breakdown.bonus||0}</strong></span>
+                        <span>DH <strong>{r.breakdown.darkHorse||0}</strong></span>
                       </div>
                     </td>
                     <td className="lb-total">{r.total}</td>
@@ -2254,6 +2644,7 @@ function AdminDashboard({ state, users, updateState, showToast, onRefresh }) {
           ["fixtures","Knockout Fixtures"],
           ["results","Enter Results"],
           ["bonus","Bonus Questions"],
+          ["darkhorse","Dark Horses"],
           ["scoring","Scoring"],
           ["danger","Reset"]
         ].map(([k, l]) => (
@@ -2294,6 +2685,7 @@ function AdminDashboard({ state, users, updateState, showToast, onRefresh }) {
       {section === "fixtures" && <FixturesAdmin state={state} updateState={updateState} showToast={showToast} />}
       {section === "results" && <ResultsAdmin state={state} updateState={updateState} showToast={showToast} />}
       {section === "bonus" && <BonusAdmin state={state} updateState={updateState} showToast={showToast} />}
+      {section === "darkhorse" && <DarkHorseAdmin state={state} users={users} updateState={updateState} showToast={showToast} />}
       {section === "scoring" && <ScoringAdmin state={state} updateState={updateState} showToast={showToast} />}
       {section === "danger" && <DangerAdmin onRefresh={onRefresh} showToast={showToast} />}
     </div>
@@ -2622,21 +3014,25 @@ function KOResults({ state, updateState, round }) {
 
 function BonusAdmin({ state, updateState, showToast }) {
   const questions = state.bonus || [];
-  const [draft, setDraft] = useState({ q: "", type: "text", options: "", answer: "", points: state.scoring.bonus });
+  const [draft, setDraft] = useState({ q: "", type: "text", options: "", answer: "", points: state.scoring.bonus, tier1: 8, tier2: 5, tier3: 3 });
 
   const add = async () => {
     if (!draft.q.trim()) { showToast("Question required"); return; }
+    const usesOptions = draft.type === "select" || draft.type === "tiered";
     const q = {
       id: "b_" + Date.now() + "_" + Math.random().toString(36).slice(2,5),
       q: draft.q.trim(),
       type: draft.type,
-      options: draft.type === "select" ? draft.options.split(",").map(s => s.trim()).filter(Boolean) : [],
+      options: usesOptions ? draft.options.split(",").map(s => s.trim()).filter(Boolean) : [],
       answer: draft.answer.trim(),
       points: parseInt(draft.points) || state.scoring.bonus,
       locked: false
     };
+    if (draft.type === "tiered") {
+      q.tierPoints = [parseInt(draft.tier1) || 8, parseInt(draft.tier2) || 5, parseInt(draft.tier3) || 3];
+    }
     await updateState(s => ({ ...s, bonus: [...(s.bonus||[]), q] }));
-    setDraft({ q: "", type: "text", options: "", answer: "", points: state.scoring.bonus });
+    setDraft({ q: "", type: "text", options: "", answer: "", points: state.scoring.bonus, tier1: 8, tier2: 5, tier3: 3 });
     showToast("Bonus question added");
   };
 
@@ -2664,22 +3060,39 @@ function BonusAdmin({ state, updateState, showToast }) {
             <select value={draft.type} onChange={e => setDraft({...draft, type: e.target.value})}>
               <option value="text">Text answer</option>
               <option value="select">Multiple choice</option>
+              <option value="tiered">Tiered (rank 3)</option>
             </select>
           </div>
           <div className="field">
-            <label>Points</label>
-            <input type="number" min="1" value={draft.points} onChange={e => setDraft({...draft, points: e.target.value})} />
+            <label>Points {draft.type === "tiered" ? "(unused for tiered)" : ""}</label>
+            <input type="number" min="1" value={draft.points} onChange={e => setDraft({...draft, points: e.target.value})} disabled={draft.type === "tiered"} />
           </div>
         </div>
-        {draft.type === "select" && (
+        {(draft.type === "select" || draft.type === "tiered") && (
           <div className="field">
             <label>Options (comma separated)</label>
-            <input type="text" placeholder="e.g. Messi, Mbappe, Bellingham, Vinicius" value={draft.options} onChange={e => setDraft({...draft, options: e.target.value})} />
+            <input type="text" placeholder="e.g. Messi, Mbappe, Bellingham, Vinicius, Haaland" value={draft.options} onChange={e => setDraft({...draft, options: e.target.value})} />
+          </div>
+        )}
+        {draft.type === "tiered" && (
+          <div className="grid grid-3">
+            <div className="field">
+              <label>1st choice pts</label>
+              <input type="number" min="0" value={draft.tier1} onChange={e => setDraft({...draft, tier1: e.target.value})} />
+            </div>
+            <div className="field">
+              <label>2nd choice pts</label>
+              <input type="number" min="0" value={draft.tier2} onChange={e => setDraft({...draft, tier2: e.target.value})} />
+            </div>
+            <div className="field">
+              <label>3rd choice pts</label>
+              <input type="number" min="0" value={draft.tier3} onChange={e => setDraft({...draft, tier3: e.target.value})} />
+            </div>
           </div>
         )}
         <div className="field">
           <label>Correct answer (optional, can fill later)</label>
-          <input type="text" value={draft.answer} onChange={e => setDraft({...draft, answer: e.target.value})} />
+          <input type="text" value={draft.answer} onChange={e => setDraft({...draft, answer: e.target.value})} placeholder={draft.type === "tiered" ? "The actual winner — e.g. the Golden Boot winner" : ""} />
         </div>
         <button className="btn btn-primary" onClick={add}>+ Add question</button>
       </div>
@@ -2693,7 +3106,7 @@ function BonusAdmin({ state, updateState, showToast }) {
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>{q.q}</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, fontFamily: 'JetBrains Mono', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
                   <span>{q.type.toUpperCase()}</span><span>·</span>
-                  <span>{q.points} PTS</span><span>·</span>
+                  <span>{q.type === "tiered" ? `${(q.tierPoints||[8,5,3]).join("/")} PTS` : `${q.points} PTS`}</span><span>·</span>
                   <span>{q.locked ? "🔒 LOCKED" : "OPEN"}</span>
                   {q.options.length > 0 && <><span>·</span><span>{q.options.length} OPTIONS</span></>}
                 </div>
@@ -2716,10 +3129,73 @@ function BonusAdmin({ state, updateState, showToast }) {
   );
 }
 
+function DarkHorseAdmin({ state, users, updateState, showToast }) {
+  const locked = !!(state.locks && state.locks.darkHorse);
+  const autoLocked = !locked && !!(state.locks && state.locks.r16);
+  const { counts, totalPickers } = darkHorsePickStats(users);
+  const ranked = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+
+  const toggle = async () => {
+    await updateState(s => ({ ...s, locks: { ...s.locks, darkHorse: !s.locks?.darkHorse } }));
+    showToast("Dark horse lock toggled");
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title">Dark Horse Control</div>
+      <p className="helper" style={{ marginBottom: 16 }}>
+        Players pick {DARK_HORSE_TOTAL} underdog teams ({DARK_HORSE_QUOTA.SACONC} S.America/CONCACAF, {DARK_HORSE_QUOTA.EUASIA} Europe/Asia, {DARK_HORSE_QUOTA.AFRICA} Africa). Picks lock when you toggle below <strong>or</strong> automatically when Round of 16 locks — whichever comes first. The popularity multiplier only activates once locked.
+      </p>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px dashed var(--line)', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontFamily: 'Anton', fontSize: 18, letterSpacing: '0.04em' }}>DARK HORSE PICKS</div>
+          <div className="helper">
+            {locked ? "Locked by admin." : autoLocked ? "Auto-locked because R16 is locked." : "Open — players can still edit."}
+          </div>
+        </div>
+        <button className={"btn btn-sm " + (locked ? "btn-danger" : "btn-ghost")} onClick={toggle}>
+          {locked ? "🔒 Locked" : "🔓 Open"}
+        </button>
+      </div>
+
+      <h4 style={{ fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.15em', color: 'var(--ink-mute)', marginBottom: 12 }}>
+        PICK DISTRIBUTION · {totalPickers} player{totalPickers===1?"":"s"} with dark horses
+      </h4>
+      {ranked.length === 0 ? (
+        <div className="empty-mini">No dark horse picks yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {ranked.map(([team, n]) => {
+            const pct = totalPickers > 0 ? Math.round((n / totalPickers) * 100) : 0;
+            return (
+              <div key={team} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ minWidth: 150, fontSize: 13 }}>{team}</span>
+                <div style={{ flex: 1, height: 8, background: 'var(--bg-2)', border: '1px solid var(--line)' }}>
+                  <div style={{ width: pct + "%", height: '100%', background: 'var(--accent)' }}></div>
+                </div>
+                <span style={{ fontFamily: 'JetBrains Mono', fontSize: 11, color: 'var(--ink-dim)', minWidth: 70, textAlign: 'right' }}>{n} · {pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScoringAdmin({ state, updateState, showToast }) {
   const [s, setS] = useState(state.scoring || DEFAULT_SCORING);
+  const dh = s.darkHorse || DEFAULT_SCORING.darkHorse;
+  const setDH = (k, v) => setS({ ...s, darkHorse: { ...(s.darkHorse || DEFAULT_SCORING.darkHorse), [k]: v } });
   const save = async () => {
-    await updateState(st => ({ ...st, scoring: { ...s, groupWinner: +s.groupWinner, thirdPlaced: +s.thirdPlaced, r32: +s.r32, r16: +s.r16, r16Score: +s.r16Score, qf: +s.qf, qfScore: +s.qfScore, sf: +s.sf, sfScore: +s.sfScore, final: +s.final, finalScore: +s.finalScore, bonus: +s.bonus } }));
+    const d = s.darkHorse || DEFAULT_SCORING.darkHorse;
+    await updateState(st => ({ ...st, scoring: {
+      ...s,
+      groupWinner: +s.groupWinner, thirdPlaced: +s.thirdPlaced, r32: +s.r32, r16: +s.r16, r16Score: +s.r16Score,
+      qf: +s.qf, qfScore: +s.qfScore, sf: +s.sf, sfScore: +s.sfScore, final: +s.final, finalScore: +s.finalScore, bonus: +s.bonus,
+      darkHorse: { r32: +d.r32, r16: +d.r16, qf: +d.qf, sf: +d.sf, final: +d.final }
+    } }));
     showToast("Scoring saved");
   };
   return (
@@ -2745,6 +3221,26 @@ function ScoringAdmin({ state, updateState, showToast }) {
             <input type="number" value={s[k]} onChange={e => setS({...s, [k]: e.target.value})} />
           </div>
         ))}
+      </div>
+      <div style={{ marginTop: 20 }}>
+        <h4 style={{ fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.15em', color: 'var(--ink-mute)', marginBottom: 12 }}>DARK HORSE — BASE POINTS PER ROUND REACHED (CUMULATIVE)</h4>
+        <div className="grid grid-3">
+          {[
+            ["r32","Reaches R32"],
+            ["r16","Reaches R16"],
+            ["qf","Reaches QF"],
+            ["sf","Reaches SF"],
+            ["final","Reaches Final"]
+          ].map(([k,l]) => (
+            <div key={k} className="field">
+              <label>{l}</label>
+              <input type="number" value={dh[k]} onChange={e => setDH(k, e.target.value)} />
+            </div>
+          ))}
+        </div>
+        <p className="helper" style={{ marginTop: 8 }}>
+          Points are cumulative: a dark horse reaching the SF earns r32+r16+qf+sf. The popularity multiplier (less-picked = more bonus) is applied automatically once dark horse picks lock.
+        </p>
       </div>
     </div>
   );
