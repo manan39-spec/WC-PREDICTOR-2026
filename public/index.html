@@ -2724,7 +2724,7 @@ function LeaderboardView({ state, users, currentUser }) {
                   <tr>
                     <th>#</th>
                     <th>Player</th>
-                    <th>Dark horses</th>
+                    {dhLocked && <th>Dark horses</th>}
                     <th style={{ textAlign: 'right' }}>DH Points</th>
                   </tr>
                 </thead>
@@ -2732,20 +2732,30 @@ function LeaderboardView({ state, users, currentUser }) {
                   {dhRanked.map((r, i) => {
                     const u = users.find(x => x.name === r.name);
                     const picks = (u && u.darkHorses) || [];
+                    const hasPicked = picks.length > 0;
                     return (
                       <tr key={r.name} style={{ background: r.name === currentUser ? 'var(--card-2)' : 'transparent' }}>
                         <td><div className={rankClass(i)}>{i+1}</div></td>
-                        <td><div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}{r.name === currentUser ? " (you)" : ""}</div></td>
                         <td>
-                          <div className="lb-breakdown">
-                            {picks.length === 0
-                              ? <span style={{ color: 'var(--ink-mute)' }}>none picked</span>
-                              : picks.map(t => {
-                                  const reached = furthestRoundReached(t, state);
-                                  return <span key={t} style={{ color: reached ? 'var(--green)' : 'var(--ink-dim)' }}>{t}</span>;
-                                })}
-                          </div>
+                          <div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}{r.name === currentUser ? " (you)" : ""}</div>
+                          {!dhLocked && (
+                            <div style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: hasPicked ? 'var(--green)' : 'var(--ink-mute)', letterSpacing: '0.1em', marginTop: 3 }}>
+                              {hasPicked ? "✓ PICKS IN" : "NOT SUBMITTED"}
+                            </div>
+                          )}
                         </td>
+                        {dhLocked && (
+                          <td>
+                            <div className="lb-breakdown">
+                              {picks.length === 0
+                                ? <span style={{ color: 'var(--ink-mute)' }}>none picked</span>
+                                : picks.map(t => {
+                                    const reached = furthestRoundReached(t, state);
+                                    return <span key={t} style={{ color: reached ? 'var(--green)' : 'var(--ink-dim)' }}>{t}</span>;
+                                  })}
+                            </div>
+                          </td>
+                        )}
                         <td className="lb-total">{r.darkHorseTotal || 0}</td>
                       </tr>
                     );
