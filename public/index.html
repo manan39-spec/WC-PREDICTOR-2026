@@ -1742,8 +1742,16 @@ function GroupPredictView({ state, myPred, updateMyPredictions, showToast }) {
 
   const setWinner = (L, team) => {
     if (locked) { showToast("Group predictions locked"); return; }
-    updateMyPredictions(p => ({ ...p, groupWinners: { ...p.groupWinners, [L]: team } }));
+    updateMyPredictions(p => {
+      // A team picked to WIN its group can't also be a 3rd-placed pick — drop it from thirds.
+      const newThirds = (p.thirds || []).filter(t => t !== team);
+      return { ...p, groupWinners: { ...p.groupWinners, [L]: team }, thirds: newThirds };
+    });
   };
+
+  // Teams the player has chosen as group winners — hidden from the thirds picker to declutter it.
+  const winnerTeams = Object.values(winners).filter(Boolean);
+  const thirdsPool = locked ? allTeams : allTeams.filter(t => !winnerTeams.includes(t));
 
   const toggleThird = (team) => {
     if (locked) { showToast("Group predictions locked"); return; }
@@ -1817,14 +1825,14 @@ function GroupPredictView({ state, myPred, updateMyPredictions, showToast }) {
         Best Third-Placed Teams <span style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>· {thirds.length}/8 picked</span>
       </h3>
       <p className="helper" style={{ marginBottom: 16 }}>
-        In the 2026 format with 12 groups of 4, the top 2 from each group plus the 8 best third-placed teams qualify for the Round of 32. Pick 8 teams you think will sneak through as the best 3rd-placers.
+        In the 2026 format with 12 groups of 4, the top 2 from each group plus the 8 best third-placed teams qualify for the Round of 32. Pick 8 teams you think will sneak through as the best 3rd-placers. <strong>Teams you've picked to win their group are hidden here</strong> — a winner can't also finish 3rd.
       </p>
 
-      {allTeams.length === 0 ? (
+      {thirdsPool.length === 0 ? (
         <div className="empty"><div className="empty-title">No teams yet</div><p>Admin needs to fill in the group draw first.</p></div>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {allTeams.map(t => {
+          {thirdsPool.map(t => {
             const picked = thirds.includes(t);
             const isActual = actualThirds.includes(t);
             let cls = "team-pick";
