@@ -1749,9 +1749,13 @@ function GroupPredictView({ state, myPred, updateMyPredictions, showToast }) {
     });
   };
 
-  // Teams the player has chosen as group winners — hidden from the thirds picker to declutter it.
+  // Optional declutter: a button lets the player hide the teams they picked as group winners
+  // from the thirds list (a winner can't finish 3rd). Off by default so nothing vanishes unexpectedly.
+  const [hideWinners, setHideWinners] = useState(false);
   const winnerTeams = Object.values(winners).filter(Boolean);
-  const thirdsPool = locked ? allTeams : allTeams.filter(t => !winnerTeams.includes(t));
+  const thirdsPool = (locked || !hideWinners)
+    ? allTeams
+    : allTeams.filter(t => !winnerTeams.includes(t) || thirds.includes(t));
 
   const toggleThird = (team) => {
     if (locked) { showToast("Group predictions locked"); return; }
@@ -1821,11 +1825,16 @@ function GroupPredictView({ state, myPred, updateMyPredictions, showToast }) {
         })}
       </div>
 
-      <h3 style={{ fontFamily: 'Anton', fontSize: 24, letterSpacing: '0.04em', marginBottom: 16, color: 'var(--accent-2)' }}>
-        Best Third-Placed Teams <span style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>· {thirds.length}/8 picked</span>
+      <h3 style={{ fontFamily: 'Anton', fontSize: 24, letterSpacing: '0.04em', marginBottom: 16, color: 'var(--accent-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <span>Best Third-Placed Teams <span style={{ fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>· {thirds.length}/8 picked</span></span>
+        {!locked && winnerTeams.length > 0 && (
+          <button className={"btn btn-sm " + (hideWinners ? "btn-primary" : "btn-ghost")} onClick={() => setHideWinners(v => !v)}>
+            {hideWinners ? "✓ Hiding my group winners" : "Hide my group winners"}
+          </button>
+        )}
       </h3>
       <p className="helper" style={{ marginBottom: 16 }}>
-        In the 2026 format with 12 groups of 4, the top 2 from each group plus the 8 best third-placed teams qualify for the Round of 32. Pick 8 teams you think will sneak through as the best 3rd-placers. <strong>Teams you've picked to win their group are hidden here</strong> — a winner can't also finish 3rd.
+        In the 2026 format with 12 groups of 4, the top 2 from each group plus the 8 best third-placed teams qualify for the Round of 32. Pick 8 teams you think will sneak through as the best 3rd-placers. Tip: tap <strong>"Hide my group winners"</strong> to remove the teams you already picked to win their groups — a winner can't also finish 3rd, so it shortens the list.
       </p>
 
       {thirdsPool.length === 0 ? (
