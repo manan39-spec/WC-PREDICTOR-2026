@@ -698,9 +698,11 @@ const DARK_HORSE_QUOTA = { SACONC: 2, EUASIA: 3, AFRICA: 2 };
 const DARK_HORSE_TOTAL = 7;
 const REGION_LABELS = { SACONC: "S. America / CONCACAF", EUASIA: "Europe / Asia", AFRICA: "Africa" };
 
-// Dark horse + tiered bonus picks lock when their own lock is set OR when R16 locks.
+// Dark horse picks are a SEPARATE competition with their own leaderboard.
+// They must be submitted before the group stage kicks off (11 June), so they
+// lock together with the group stage (or earlier if the admin locks them manually).
 function darkHorseLocked(state) {
-  return !!(state?.locks && (state.locks.darkHorse || state.locks.r16));
+  return !!(state?.locks && (state.locks.darkHorse || state.locks.group));
 }
 
 const BRACKET_VERSION = 3; // bump to force fixture regeneration on existing state
@@ -994,8 +996,10 @@ function calculateScore(predictions, state, allUsers) {
     }
   });
 
-  const total = Object.values(b).reduce((a,c) => a+c, 0);
-  return { total, breakdown: b };
+  // MAIN leaderboard total EXCLUDES dark horses — dark horses are a separate competition.
+  const total = b.group + b.r32 + b.r16 + b.qf + b.sf + b.final + b.bronze + b.bonus;
+  const darkHorseTotal = b.darkHorse;
+  return { total, breakdown: b, darkHorseTotal };
 }
 
 // Pick-percentage map for dark horses across all players (0–1 per team).
@@ -1626,7 +1630,10 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
             <li><span className="rule-name">Final</span><span className="rule-points">{score.breakdown.final||0}</span></li>
             <li><span className="rule-name">Bronze final</span><span className="rule-points">{score.breakdown.bronze||0}</span></li>
             <li><span className="rule-name">Bonus questions</span><span className="rule-points">{score.breakdown.bonus||0}</span></li>
-            <li><span className="rule-name">Dark horses</span><span className="rule-points">{score.breakdown.darkHorse||0}</span></li>
+            <li style={{ borderTop: '1px solid var(--line)', marginTop: 6, paddingTop: 12 }}>
+              <span className="rule-name" style={{ color: 'var(--accent-2)' }}>🐎 Dark Horse Cup <small style={{ color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'JetBrains Mono', fontSize: 9 }}>· separate prize</small></span>
+              <span className="rule-points" style={{ color: 'var(--accent-2)' }}>{score.darkHorseTotal||0}</span>
+            </li>
           </ul>
         </div>
       </div>
@@ -1682,7 +1689,7 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
             <strong style={{ color: 'var(--ink)'}}>3 · Knockouts escalate:</strong> R32 ({state.scoring.r32}pts) → R16 ({state.scoring.r16}) → QF ({state.scoring.qf}) → SF ({state.scoring.sf}) → Final ({state.scoring.final}) per correct winner, plus exact-score bonuses ({state.scoring.r16Score}pts, {state.scoring.finalScore}pts for the final). The deeper the round, the bigger the points.
           </p>
           <p style={{ marginBottom: 10 }}>
-            <strong style={{ color: 'var(--ink)'}}>4 · Dark Horses:</strong> Pick 7 underdog teams. Earn cumulative points the further they go, with a popularity multiplier — the fewer friends who picked your horse, the more it pays off.
+            <strong style={{ color: 'var(--ink)'}}>4 · Dark Horses (separate cup):</strong> Before kickoff on 11 June, pick 7 underdog teams. This is its own competition with its own leaderboard and prize — these points do NOT count toward the main league. Earn cumulative points the further your horses go, with a popularity multiplier: the fewer friends who picked your horse, the more it pays off.
           </p>
           <p>
             <strong style={{ color: 'var(--ink)'}}>5 · Bonus Qs throughout:</strong> Golden Boot, Golden Glove, Player of the Tournament and more — including tiered questions where ranking your top 3 right pays 8 / 5 / 3 points.
@@ -2091,7 +2098,7 @@ function BonusView({ state, myPred, updateMyPredictions, showToast }) {
 function DarkHorseView({ state, myPred, users, updateMyPredictions, showToast }) {
   if (!myPred) return null;
   const locked = darkHorseLocked(state);
-  const lockReason = state.locks?.darkHorse ? "locked by admin" : (state.locks?.r16 ? "locked when R16 started" : "");
+  const lockReason = state.locks?.darkHorse ? "locked by admin" : (state.locks?.group ? "locked at kickoff (11 June)" : "");
   const picks = myPred.darkHorses || [];
 
   // Eligible teams = all teams minus excluded, grouped by region
@@ -2148,7 +2155,7 @@ function DarkHorseView({ state, myPred, users, updateMyPredictions, showToast })
         <div className="eyebrow">PHASE · UNDERDOGS</div>
         <h1 className="page-title">DARK<br/><span className="it">horses.</span></h1>
         <p className="page-sub">
-          Pick {DARK_HORSE_TOTAL} teams from outside the favourites. They score cumulative points the further they go — and the fewer friends who back them, the bigger the popularity bonus. Editable until the Round of 32 begins.
+          Pick {DARK_HORSE_TOTAL} underdogs before the tournament kicks off on <strong>11 June</strong>. This is its own competition with a separate prize — they score cumulative points the further they go, and the fewer friends who back them, the bigger the popularity bonus. Locks at kickoff.
         </p>
       </div>
 
@@ -2617,43 +2624,52 @@ function DarkHorsePicksGrid({ state, users, currentUser }) {
 }
 
 function LeaderboardView({ state, users, currentUser }) {
-  const ranked = useMemo(() => {
-    return users.map(u => ({ name: u.name, ...calculateScore(u, state, users) }))
-                .sort((a,b) => b.total - a.total);
+  const [board, setBoard] = useState("main"); // "main" | "darkhorse"
+
+  const scored = useMemo(() => {
+    return users.map(u => ({ name: u.name, ...calculateScore(u, state, users) }));
   }, [users, state]);
+
+  const ranked = useMemo(() => [...scored].sort((a,b) => b.total - a.total), [scored]);
+  const dhRanked = useMemo(() => [...scored].sort((a,b) => (b.darkHorseTotal||0) - (a.darkHorseTotal||0)), [scored]);
+  const dhLocked = darkHorseLocked(state);
+
+  const rankClass = (i) => "lb-rank" + (i===0?" gold":i===1?" silver":i===2?" bronze":"");
 
   return (
     <div>
       <div className="page-head">
         <div className="eyebrow">LIVE STANDINGS</div>
         <h1 className="page-title">THE <span className="it">leaderboard</span></h1>
+        <p className="page-sub">
+          Two separate competitions, two separate prizes: the main prediction league, and the Dark Horse Cup. Dark horse points never touch your main total.
+        </p>
       </div>
 
-      {ranked.length === 0 ? (
-        <div className="empty"><div className="empty-title">NO PLAYERS YET</div><p>Once friends sign in and make predictions, they'll show here.</p></div>
-      ) : (
-        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-          <table className="lb-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Player</th>
-                <th>Breakdown</th>
-                <th style={{ textAlign: 'right' }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((r, i) => {
-                let rankCls = "lb-rank";
-                if (i === 0) rankCls += " gold";
-                else if (i === 1) rankCls += " silver";
-                else if (i === 2) rankCls += " bronze";
-                return (
+      <div className="nav" style={{ marginBottom: 28 }}>
+        <button className={board==="main"?"active":""} onClick={()=>setBoard("main")}>Main League</button>
+        <button className={board==="darkhorse"?"active":""} onClick={()=>setBoard("darkhorse")}>🐎 Dark Horse Cup</button>
+      </div>
+
+      {board === "main" ? (
+        ranked.length === 0 ? (
+          <div className="empty"><div className="empty-title">NO PLAYERS YET</div><p>Once friends sign in and make predictions, they'll show here.</p></div>
+        ) : (
+          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+            <table className="lb-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Player</th>
+                  <th>Breakdown</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((r, i) => (
                   <tr key={r.name} style={{ background: r.name === currentUser ? 'var(--card-2)' : 'transparent' }}>
-                    <td><div className={rankCls}>{i+1}</div></td>
-                    <td>
-                      <div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}{r.name === currentUser ? " (you)" : ""}</div>
-                    </td>
+                    <td><div className={rankClass(i)}>{i+1}</div></td>
+                    <td><div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}{r.name === currentUser ? " (you)" : ""}</div></td>
                     <td>
                       <div className="lb-breakdown">
                         <span>GRP <strong>{r.breakdown.group||0}</strong></span>
@@ -2664,16 +2680,64 @@ function LeaderboardView({ state, users, currentUser }) {
                         <span>FIN <strong>{r.breakdown.final||0}</strong></span>
                         <span>BRZ <strong>{r.breakdown.bronze||0}</strong></span>
                         <span>BONUS <strong>{r.breakdown.bonus||0}</strong></span>
-                        <span>DH <strong>{r.breakdown.darkHorse||0}</strong></span>
                       </div>
                     </td>
                     <td className="lb-total">{r.total}</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        <>
+          <div className="lock-banner" style={ dhLocked
+            ? { background: 'rgba(47,194,106,0.08)', borderColor: 'rgba(47,194,106,0.3)', color: 'var(--green)' }
+            : {} }>
+            {dhLocked
+              ? "🐎 Dark horse picks are locked. Standings update as your underdogs advance — popularity bonus included."
+              : "🐎 Picks still open until 11 June. Scores stay at 0 and the popularity bonus is hidden until everyone's picks lock at kickoff."}
+          </div>
+          {dhRanked.length === 0 ? (
+            <div className="empty"><div className="empty-title">NO PLAYERS YET</div></div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+              <table className="lb-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Player</th>
+                    <th>Dark horses</th>
+                    <th style={{ textAlign: 'right' }}>DH Points</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dhRanked.map((r, i) => {
+                    const u = users.find(x => x.name === r.name);
+                    const picks = (u && u.darkHorses) || [];
+                    return (
+                      <tr key={r.name} style={{ background: r.name === currentUser ? 'var(--card-2)' : 'transparent' }}>
+                        <td><div className={rankClass(i)}>{i+1}</div></td>
+                        <td><div style={{ fontWeight: 600, fontSize: 15 }}>{r.name}{r.name === currentUser ? " (you)" : ""}</div></td>
+                        <td>
+                          <div className="lb-breakdown">
+                            {picks.length === 0
+                              ? <span style={{ color: 'var(--ink-mute)' }}>none picked</span>
+                              : picks.map(t => {
+                                  const reached = furthestRoundReached(t, state);
+                                  return <span key={t} style={{ color: reached ? 'var(--green)' : 'var(--ink-dim)' }}>{t}</span>;
+                                })}
+                          </div>
+                        </td>
+                        <td className="lb-total">{r.darkHorseTotal || 0}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -3270,7 +3334,7 @@ function BonusAdmin({ state, updateState, showToast }) {
 
 function DarkHorseAdmin({ state, users, updateState, showToast }) {
   const locked = !!(state.locks && state.locks.darkHorse);
-  const autoLocked = !locked && !!(state.locks && state.locks.r16);
+  const autoLocked = !locked && !!(state.locks && state.locks.group);
   const { counts, totalPickers } = darkHorsePickStats(users);
   const ranked = Object.entries(counts).sort((a,b) => b[1] - a[1]);
 
@@ -3283,18 +3347,18 @@ function DarkHorseAdmin({ state, users, updateState, showToast }) {
     <div className="card">
       <div className="card-title">Dark Horse Control</div>
       <p className="helper" style={{ marginBottom: 16 }}>
-        Players pick {DARK_HORSE_TOTAL} underdog teams ({DARK_HORSE_QUOTA.SACONC} S.America/CONCACAF, {DARK_HORSE_QUOTA.EUASIA} Europe/Asia, {DARK_HORSE_QUOTA.AFRICA} Africa). Picks lock when you toggle below <strong>or</strong> automatically when Round of 16 locks — whichever comes first. The popularity multiplier only activates once locked.
+        Dark horses are a <strong>separate competition with their own leaderboard and prize</strong> — these points do NOT count toward the main league. Players pick {DARK_HORSE_TOTAL} underdogs ({DARK_HORSE_QUOTA.SACONC} S.America/CONCACAF, {DARK_HORSE_QUOTA.EUASIA} Europe/Asia, {DARK_HORSE_QUOTA.AFRICA} Africa) <strong>before the group stage kicks off (11 June)</strong>. Picks lock automatically when you lock the group stage, or when you toggle the lock below. The popularity multiplier activates once locked.
       </p>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px dashed var(--line)', marginBottom: 16 }}>
         <div>
           <div style={{ fontFamily: 'Anton', fontSize: 18, letterSpacing: '0.04em' }}>DARK HORSE PICKS</div>
           <div className="helper">
-            {locked ? "Locked by admin." : autoLocked ? "Auto-locked because R16 is locked." : "Open — players can still edit."}
+            {locked ? "Locked by admin." : autoLocked ? "Auto-locked — the group stage is locked." : "Open — players can still edit until 11 June."}
           </div>
         </div>
         <button className={"btn btn-sm " + (locked ? "btn-danger" : "btn-ghost")} onClick={toggle}>
-          {locked ? "🔒 Locked" : "🔓 Open"}
+          {locked ? "🔒 Locked" : "🔓 Lock now"}
         </button>
       </div>
 
