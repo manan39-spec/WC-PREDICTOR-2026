@@ -611,6 +611,13 @@ function parseStored(value) {
 // ============================================================
 const ADMIN_USERNAME = "MADMIN";
 const ADMIN_PASSWORD = "Fifapadmin007!@"; // friend who sets it up shares this with no one
+// Download-only login: can ONLY export the predictions CSV backup — no phase/results/reset powers.
+// Download-only logins: can ONLY export the predictions CSV backup — no other powers.
+// Add or rename as many as you like; each entry is { username, password }.
+const EXPORT_LOGINS = [
+  { username: "PANENKADATA", password: "Backup2026!@" },
+  { username: "MDATA",       password: "Mdata2026!@" },
+];
 const GROUP_LETTERS = ["A","B","C","D","E","F","G","H","I","J","K","L"]; // 12 groups for WC2026
 const PHASES = ["setup","group","r32","r16","qf","sf","final","done"];
 const PHASE_LABELS = {
@@ -1034,6 +1041,7 @@ function App() {
   const [view, setView] = useState("home");
   const [toast, setToast] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminRole, setAdminRole] = useState(null); // "full" | "export"
   const [remoteAvailable, setRemoteAvailable] = useState(false);
 
   const showToast = useCallback((msg) => {
@@ -1148,6 +1156,7 @@ function App() {
   const logout = useCallback(async () => {
     setUser(null);
     setIsAdmin(false);
+    setAdminRole(null);
     await setPersonal("current_user", "");
   }, []);
 
@@ -1221,7 +1230,7 @@ function App() {
         {view==="darkhorse" && <DarkHorseView state={state} myPred={myPredictions} users={users} updateMyPredictions={updateMyPredictions} showToast={showToast} />}
         {view==="picks" && <PicksView state={state} users={users} currentUser={user} />}
         {view==="leaderboard" && <LeaderboardView state={state} users={users} currentUser={user} />}
-        {view==="admin" && <AdminView state={state} users={users} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} showToast={showToast} onRefresh={refreshAll} />}
+        {view==="admin" && <AdminView state={state} users={users} updateState={updateState} isAdmin={isAdmin} setIsAdmin={setIsAdmin} adminRole={adminRole} setAdminRole={setAdminRole} showToast={showToast} onRefresh={refreshAll} />}
 
         <footer className="app-footer">
           Developed for <span className="accent">FIFA26</span>
@@ -2773,15 +2782,20 @@ function LeaderboardView({ state, users, currentUser }) {
 // ============================================================
 // ADMIN VIEW
 // ============================================================
-function AdminView({ state, users, updateState, isAdmin, setIsAdmin, showToast, onRefresh }) {
+function AdminView({ state, users, updateState, isAdmin, setIsAdmin, adminRole, setAdminRole, showToast, onRefresh }) {
   const [adminUser, setAdminUser] = useState("");
   const [pw, setPw] = useState("");
 
   const tryLogin = () => {
-    if (adminUser.trim() === ADMIN_USERNAME && pw === ADMIN_PASSWORD) {
+    const u = adminUser.trim();
+    if (u === ADMIN_USERNAME && pw === ADMIN_PASSWORD) {
+      setAdminRole("full");
+      setIsAdmin(true);
+    } else if (EXPORT_LOGINS.some(l => u === l.username && pw === l.password)) {
+      setAdminRole("export");
       setIsAdmin(true);
     } else {
-      showToast("Wrong admin credentials");
+      showToast("Wrong credentials");
     }
   };
 
@@ -2794,17 +2808,21 @@ function AdminView({ state, users, updateState, isAdmin, setIsAdmin, showToast, 
             Only the person setting up the league should be admin. Credentials are set in the code by whoever deployed this — ask them if you need them.
           </p>
           <div className="field">
-            <label>Admin username</label>
-            <input type="text" value={adminUser} onChange={e=>setAdminUser(e.target.value)} placeholder="Admin username" autoFocus onKeyDown={e=>e.key==="Enter" && tryLogin()} />
+            <label>Username</label>
+            <input type="text" value={adminUser} onChange={e=>setAdminUser(e.target.value)} placeholder="Username" autoFocus onKeyDown={e=>e.key==="Enter" && tryLogin()} />
           </div>
           <div className="field">
             <label>Password</label>
             <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter" && tryLogin()} />
           </div>
-          <button className="btn btn-primary" onClick={tryLogin}>Unlock admin</button>
+          <button className="btn btn-primary" onClick={tryLogin}>Unlock</button>
         </div>
       </div>
     );
+  }
+
+  if (adminRole === "export") {
+    return <ExportOnlyDashboard state={state} users={users} showToast={showToast} />;
   }
 
   return <AdminDashboard state={state} users={users} updateState={updateState} showToast={showToast} onRefresh={onRefresh} />;
@@ -2881,7 +2899,7 @@ function AdminDashboard({ state, users, updateState, showToast, onRefresh }) {
       )}
 
       {section === "groups" && <GroupsAdmin state={state} updateState={updateState} showToast={showToast} />}
-      {section === "players" && <PlayersAdmin users={users} showToast={showToast} onRefresh={onRefresh} />}
+      {section === "players" && <PlayersAdmin users={users} state={state} showToast={showToast} onRefresh={onRefresh} />}
       {section === "fixtures" && <FixturesAdmin state={state} updateState={updateState} showToast={showToast} />}
       {section === "results" && <ResultsAdmin state={state} updateState={updateState} showToast={showToast} />}
       {section === "bonus" && <BonusAdmin state={state} updateState={updateState} showToast={showToast} />}
@@ -2892,13 +2910,112 @@ function AdminDashboard({ state, users, updateState, showToast, onRefresh }) {
   );
 }
 
-function PlayersAdmin({ users, showToast, onRefresh }) {
+// ---- Shared backup export: every player's predictions to a CSV (opens in Excel) ----
+function downloadPredictionsCSV(users, state, showToast) {
+  const sorted = [...users].sort((a,b) => (a.joined || 0) - (b.joined || 0));
+  const csvEscape = (val) => {
+    const s = (val == null ? "" : String(val));
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const rounds = ["r32", "r16", "qf", "sf", "final"];
+  const fx = {};
+  rounds.forEach(r => { fx[r] = (state.fixtures && state.fixtures[r]) || []; });
+  const bonusQs = state.bonus || [];
+
+  const headers = ["Player", "Joined"];
+  GROUP_LETTERS.forEach(L => headers.push("GW " + L));
+  for (let i = 1; i <= 8; i++) headers.push("Third " + i);
+  for (let i = 1; i <= DARK_HORSE_TOTAL; i++) headers.push("Dark Horse " + i);
+  bonusQs.forEach((q, idx) => headers.push("Bonus: " + (q.q || ("Q" + (idx + 1)))));
+  rounds.forEach(r => fx[r].forEach(f => {
+    const lbl = (f.label || (r.toUpperCase() + " M" + (f.num || ""))) + " [" + f.team1 + " v " + f.team2 + "]";
+    headers.push(lbl + " - Winner");
+    if (r !== "r32") headers.push(lbl + " - Score");
+  }));
+
+  const rows = sorted.map(u => {
+    const row = [u.name, u.joined ? new Date(u.joined).toISOString().slice(0, 10) : ""];
+    GROUP_LETTERS.forEach(L => row.push((u.groupWinners || {})[L] || ""));
+    const thirds = u.thirds || [];
+    for (let i = 0; i < 8; i++) row.push(thirds[i] || "");
+    const dh = u.darkHorses || [];
+    for (let i = 0; i < DARK_HORSE_TOTAL; i++) row.push(dh[i] || "");
+    bonusQs.forEach(q => {
+      const ans = (u.bonus || {})[q.id];
+      row.push(Array.isArray(ans) ? ans.filter(Boolean).join(" > ") : (ans || ""));
+    });
+    rounds.forEach(r => fx[r].forEach(f => {
+      const pick = (u[r] || {})[f.id] || {};
+      row.push(pick.winner || "");
+      if (r !== "r32") row.push(pick.score || "");
+    }));
+    return row;
+  });
+
+  const csv = [headers, ...rows].map(r => r.map(csvEscape).join(",")).join("\r\n");
+  // Leading BOM so Excel reads UTF-8 (accented names like Curaçao) correctly.
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "panenka_predictions_" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (showToast) showToast(`Downloaded ${sorted.length} players' predictions`);
+}
+
+// Restricted dashboard for the download-only login — backup export and nothing else.
+function ExportOnlyDashboard({ users, state, showToast }) {
+  const sorted = [...users].sort((a,b) => (a.joined || 0) - (b.joined || 0));
+  return (
+    <div>
+      <div className="page-head">
+        <div className="eyebrow">DATA · BACKUP ACCESS</div>
+        <h1 className="page-title">EXPORT <span className="it">predictions.</span></h1>
+        <p className="page-sub">
+          Download-only access. You can export everyone's predictions as a backup CSV — but you can't change phases, enter results, reset the league, or touch any settings.
+        </p>
+      </div>
+      <div className="card">
+        <div className="card-title">
+          <span>Predictions backup · {users.length} players</span>
+          <button className="btn btn-primary btn-sm" onClick={() => downloadPredictionsCSV(users, state, showToast)} disabled={users.length === 0}>⬇ Download all predictions (CSV)</button>
+        </div>
+        <div className="lock-banner" style={{ background: 'rgba(47,194,106,0.06)', borderColor: 'rgba(47,194,106,0.25)', color: 'var(--ink-dim)', marginBottom: 18 }}>
+          💾 <span>Downloads every player's full predictions (group winners, thirds, dark horses, bonus answers, and any knockout picks) as a CSV that opens in Excel. Grab one before kickoff and after each lock so the data is always safe.</span>
+        </div>
+        {sorted.length === 0 ? (
+          <div className="empty-mini">No players have signed up yet.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {sorted.map(u => {
+              const gw = Object.values(u.groupWinners || {}).filter(Boolean).length;
+              const dh = (u.darkHorses || []).length;
+              return (
+                <div key={u.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-2)', border: '1px solid var(--line)', fontSize: 13 }}>
+                  <span style={{ fontWeight: 600 }}>{u.name}</span>
+                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>{gw}/12 GW · {(u.thirds||[]).length}/8 THIRDS · {dh}/{DARK_HORSE_TOTAL} DH</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlayersAdmin({ users, state, showToast, onRefresh }) {
   const [resetting, setResetting] = useState(null);
   const [newPw, setNewPw] = useState("");
   const [revealed, setRevealed] = useState(null); // { name, pw } shown briefly after reset
   const [deleting, setDeleting] = useState(null);
 
   const sorted = [...users].sort((a,b) => (a.joined || 0) - (b.joined || 0));
+
+  const downloadPredictions = () => downloadPredictionsCSV(users, state, showToast);
 
   const doReset = async () => {
     if (!resetting) return;
@@ -2928,8 +3045,11 @@ function PlayersAdmin({ users, showToast, onRefresh }) {
   return (
     <div className="card">
       <div className="card-title">
-        Players · {users.length}
-        <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>RESET PASSWORDS · REMOVE PLAYERS</span>
+        <span>Players · {users.length}</span>
+        <button className="btn btn-primary btn-sm" onClick={downloadPredictions} disabled={users.length === 0}>⬇ Download all predictions (CSV)</button>
+      </div>
+      <div className="lock-banner" style={{ background: 'rgba(47,194,106,0.06)', borderColor: 'rgba(47,194,106,0.25)', color: 'var(--ink-dim)', marginBottom: 18 }}>
+        💾 <span><strong style={{ color: 'var(--green)' }}>Backup:</strong> downloads every player's full predictions (group winners, thirds, dark horses, bonus answers, and any knockout picks) as a CSV that opens in Excel. Grab one before kickoff and after each lock so you always have the data if the app or server has issues.</span>
       </div>
 
       {revealed && (
