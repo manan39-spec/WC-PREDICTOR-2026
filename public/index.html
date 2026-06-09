@@ -3015,8 +3015,6 @@ function PlayersAdmin({ users, state, showToast, onRefresh }) {
 
   const sorted = [...users].sort((a,b) => (a.joined || 0) - (b.joined || 0));
 
-  const downloadPredictions = () => downloadPredictionsCSV(users, state, showToast);
-
   const doReset = async () => {
     if (!resetting) return;
     if (newPw.length < 4) { showToast("Password too short"); return; }
@@ -3045,11 +3043,8 @@ function PlayersAdmin({ users, state, showToast, onRefresh }) {
   return (
     <div className="card">
       <div className="card-title">
-        <span>Players · {users.length}</span>
-        <button className="btn btn-primary btn-sm" onClick={downloadPredictions} disabled={users.length === 0}>⬇ Download all predictions (CSV)</button>
-      </div>
-      <div className="lock-banner" style={{ background: 'rgba(47,194,106,0.06)', borderColor: 'rgba(47,194,106,0.25)', color: 'var(--ink-dim)', marginBottom: 18 }}>
-        💾 <span><strong style={{ color: 'var(--green)' }}>Backup:</strong> downloads every player's full predictions (group winners, thirds, dark horses, bonus answers, and any knockout picks) as a CSV that opens in Excel. Grab one before kickoff and after each lock so you always have the data if the app or server has issues.</span>
+        Players · {users.length}
+        <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>RESET PASSWORDS · REMOVE PLAYERS</span>
       </div>
 
       {revealed && (
