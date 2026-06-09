@@ -2881,7 +2881,7 @@ function AdminDashboard({ state, users, updateState, showToast, onRefresh }) {
       )}
 
       {section === "groups" && <GroupsAdmin state={state} updateState={updateState} showToast={showToast} />}
-      {section === "players" && <PlayersAdmin users={users} state={state} showToast={showToast} onRefresh={onRefresh} />}
+      {section === "players" && <PlayersAdmin users={users} showToast={showToast} onRefresh={onRefresh} />}
       {section === "fixtures" && <FixturesAdmin state={state} updateState={updateState} showToast={showToast} />}
       {section === "results" && <ResultsAdmin state={state} updateState={updateState} showToast={showToast} />}
       {section === "bonus" && <BonusAdmin state={state} updateState={updateState} showToast={showToast} />}
@@ -2892,68 +2892,13 @@ function AdminDashboard({ state, users, updateState, showToast, onRefresh }) {
   );
 }
 
-function PlayersAdmin({ users, state, showToast, onRefresh }) {
+function PlayersAdmin({ users, showToast, onRefresh }) {
   const [resetting, setResetting] = useState(null);
   const [newPw, setNewPw] = useState("");
   const [revealed, setRevealed] = useState(null); // { name, pw } shown briefly after reset
   const [deleting, setDeleting] = useState(null);
 
   const sorted = [...users].sort((a,b) => (a.joined || 0) - (b.joined || 0));
-
-  // ---- Full backup export: every player's predictions to a CSV (opens in Excel) ----
-  const downloadPredictions = () => {
-    const csvEscape = (val) => {
-      const s = (val == null ? "" : String(val));
-      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
-    const rounds = ["r32", "r16", "qf", "sf", "final"];
-    const fx = {};
-    rounds.forEach(r => { fx[r] = (state.fixtures && state.fixtures[r]) || []; });
-    const bonusQs = state.bonus || [];
-
-    const headers = ["Player", "Joined"];
-    GROUP_LETTERS.forEach(L => headers.push("GW " + L));
-    for (let i = 1; i <= 8; i++) headers.push("Third " + i);
-    for (let i = 1; i <= DARK_HORSE_TOTAL; i++) headers.push("Dark Horse " + i);
-    bonusQs.forEach((q, idx) => headers.push("Bonus: " + (q.q || ("Q" + (idx + 1)))));
-    rounds.forEach(r => fx[r].forEach(f => {
-      const lbl = (f.label || (r.toUpperCase() + " M" + (f.num || ""))) + " [" + f.team1 + " v " + f.team2 + "]";
-      headers.push(lbl + " - Winner");
-      if (r !== "r32") headers.push(lbl + " - Score");
-    }));
-
-    const rows = sorted.map(u => {
-      const row = [u.name, u.joined ? new Date(u.joined).toISOString().slice(0, 10) : ""];
-      GROUP_LETTERS.forEach(L => row.push((u.groupWinners || {})[L] || ""));
-      const thirds = u.thirds || [];
-      for (let i = 0; i < 8; i++) row.push(thirds[i] || "");
-      const dh = u.darkHorses || [];
-      for (let i = 0; i < DARK_HORSE_TOTAL; i++) row.push(dh[i] || "");
-      bonusQs.forEach(q => {
-        const ans = (u.bonus || {})[q.id];
-        row.push(Array.isArray(ans) ? ans.filter(Boolean).join(" > ") : (ans || ""));
-      });
-      rounds.forEach(r => fx[r].forEach(f => {
-        const pick = (u[r] || {})[f.id] || {};
-        row.push(pick.winner || "");
-        if (r !== "r32") row.push(pick.score || "");
-      }));
-      return row;
-    });
-
-    const csv = [headers, ...rows].map(r => r.map(csvEscape).join(",")).join("\r\n");
-    // Leading BOM so Excel reads UTF-8 (accented names like Curaçao) correctly.
-    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "panenka_predictions_" + new Date().toISOString().slice(0, 10) + ".csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast(`Downloaded ${sorted.length} players' predictions`);
-  };
 
   const doReset = async () => {
     if (!resetting) return;
@@ -2983,11 +2928,8 @@ function PlayersAdmin({ users, state, showToast, onRefresh }) {
   return (
     <div className="card">
       <div className="card-title">
-        <span>Players · {users.length}</span>
-        <button className="btn btn-primary btn-sm" onClick={downloadPredictions} disabled={users.length === 0}>⬇ Download all predictions (CSV)</button>
-      </div>
-      <div className="lock-banner" style={{ background: 'rgba(47,194,106,0.06)', borderColor: 'rgba(47,194,106,0.25)', color: 'var(--ink-dim)', marginBottom: 18 }}>
-        💾 <span><strong style={{ color: 'var(--green)' }}>Backup:</strong> downloads every player's full predictions (group winners, thirds, dark horses, bonus answers, and any knockout picks) as a CSV that opens in Excel. Grab one before kickoff and after each lock so you always have the data if the app or server has issues.</span>
+        Players · {users.length}
+        <span style={{ fontFamily: 'JetBrains Mono', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.15em' }}>RESET PASSWORDS · REMOVE PLAYERS</span>
       </div>
 
       {revealed && (
