@@ -619,6 +619,19 @@ const EXPORT_LOGINS = [
   { username: "MDATA",       password: "Mdata2026!@" },
 ];
 const GROUP_LETTERS = ["A","B","C","D","E","F","G","H","I","J","K","L"]; // 12 groups for WC2026
+
+// ============================================================
+// COUNTDOWN TARGET — update this each round to point the Home
+// countdown at the next round's first match + pick deadline.
+// Times are UTC. MST = UTC-7, so 12:00 PM MST = 19:00 UTC.
+// ============================================================
+const NEXT_ROUND = {
+  name: "Round of 32",
+  kickoffUTC: "2026-06-28T19:00:00Z",   // Jun 28 · 12:00 PM MST
+  deadlineUTC: "2026-06-28T17:30:00Z",  // Jun 28 · 10:30 AM MST (pick deadline)
+  kickoffLabel: "Jun 28 · 12:00 PM MST",
+  deadlineLabel: "10:30 AM MST"
+};
 const PHASES = ["setup","group","r32","r16","qf","sf","final","done"];
 const PHASE_LABELS = {
   setup: "Setup",
@@ -1449,8 +1462,8 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
   const totalUsers = allScores.length;
 
   // ---- Countdown to opening match (Mexico City, 11 June 2026, ~18:00 local) ----
-  // Kickoff: 12:00 PM MST (Mountain Standard Time, UTC-7) on 11 June 2026 = 19:00 UTC.
-  const KICKOFF = new Date('2026-06-11T19:00:00Z').getTime();
+  // ---- Countdown to the next round's first match (see NEXT_ROUND config up top) ----
+  const KICKOFF = new Date(NEXT_ROUND.kickoffUTC).getTime();
   const diff = Math.max(0, KICKOFF - now);
   const days = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
@@ -1459,8 +1472,8 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
   const kickoffPassed = diff === 0;
   const pad = n => String(n).padStart(2, '0');
 
-  // ---- Pick deadline: 1 hour before kickoff = 11:00 AM MST ----
-  const DEADLINE = KICKOFF - 60 * 60 * 1000;
+  // ---- Pick deadline for that round (see NEXT_ROUND config up top) ----
+  const DEADLINE = new Date(NEXT_ROUND.deadlineUTC).getTime();
   const dDiff = Math.max(0, DEADLINE - now);
   const dDays = Math.floor(dDiff / 86400000);
   const dHours = Math.floor((dDiff % 86400000) / 3600000);
@@ -1540,12 +1553,12 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
       {!kickoffPassed ? (
         <div className="countdown-row">
           <div>
-            <div className="countdown-label">KICKOFF IN</div>
-            <div className="countdown-where">Jun 11 · 12:00 PM MST · kickoff</div>
+            <div className="countdown-label">{NEXT_ROUND.name.toUpperCase()} KICKS OFF IN</div>
+            <div className="countdown-where">{NEXT_ROUND.kickoffLabel} · kickoff</div>
             <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--line)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: deadlinePassed ? 'var(--red)' : 'var(--accent-2)' }}>
               {deadlinePassed
                 ? <>🔒 Pick deadline passed</>
-                : <>⏰ Pick deadline in <strong style={{ fontSize: 13 }}>{deadlineStr}</strong> · 11:00 AM MST</>}
+                : <>⏰ Pick deadline in <strong style={{ fontSize: 13 }}>{deadlineStr}</strong> · {NEXT_ROUND.deadlineLabel}</>}
             </div>
           </div>
           <div className="countdown-numbers">
