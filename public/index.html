@@ -1449,7 +1449,8 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
   const totalUsers = allScores.length;
 
   // ---- Countdown to opening match (Mexico City, 11 June 2026, ~18:00 local) ----
-  const KICKOFF = new Date('2026-06-11T23:00:00Z').getTime();
+  // Kickoff: 12:00 PM MST (Mountain Standard Time, UTC-7) on 11 June 2026 = 19:00 UTC.
+  const KICKOFF = new Date('2026-06-11T19:00:00Z').getTime();
   const diff = Math.max(0, KICKOFF - now);
   const days = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
@@ -1457,6 +1458,18 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
   const seconds = Math.floor((diff % 60000) / 1000);
   const kickoffPassed = diff === 0;
   const pad = n => String(n).padStart(2, '0');
+
+  // ---- Pick deadline: 1 hour before kickoff = 11:00 AM MST ----
+  const DEADLINE = KICKOFF - 60 * 60 * 1000;
+  const dDiff = Math.max(0, DEADLINE - now);
+  const dDays = Math.floor(dDiff / 86400000);
+  const dHours = Math.floor((dDiff % 86400000) / 3600000);
+  const dMinutes = Math.floor((dDiff % 3600000) / 60000);
+  const dSeconds = Math.floor((dDiff % 60000) / 1000);
+  const deadlinePassed = dDiff === 0;
+  const deadlineStr = dDays > 0
+    ? `${dDays}d ${dHours}h ${pad(dMinutes)}m`
+    : `${dHours}h ${pad(dMinutes)}m ${pad(dSeconds)}s`;
 
   // ---- Phase progress timeline ----
   const phaseOrder = ["setup","group","r32","r16","qf","sf","final","done"];
@@ -1516,7 +1529,7 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
         <h1 className="page-title">{hero.l1}<br/><span className="it">{hero.l2}</span></h1>
         <p className="page-sub">
           {state.phase === "setup"
-            ? "9 days to kickoff. Admin's setting the table — once the draw teams are in, predictions open and the league goes live."
+            ? "Kickoff is almost here. Admin's setting the table — once the draw teams are in, predictions open and the league goes live."
             : state.phase === "done"
             ? "Tournament concluded. The standings are final. Check the leaderboard to see who took the crown."
             : `Currently running: ${PHASE_LABELS[state.phase]}. Lock in your picks before the round starts — once admin locks the phase, no changes allowed.`}
@@ -1528,11 +1541,18 @@ function HomeView({ state, user, myPred, users, onRefresh, setView }) {
         <div className="countdown-row">
           <div>
             <div className="countdown-label">KICKOFF IN</div>
-            <div className="countdown-where">Mexico City · Jun 11 · WC2026 opens</div>
+            <div className="countdown-where">Jun 11 · 12:00 PM MST · kickoff</div>
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--line)', fontFamily: 'JetBrains Mono', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: deadlinePassed ? 'var(--red)' : 'var(--accent-2)' }}>
+              {deadlinePassed
+                ? <>🔒 Pick deadline passed</>
+                : <>⏰ Pick deadline in <strong style={{ fontSize: 13 }}>{deadlineStr}</strong> · 11:00 AM MST</>}
+            </div>
           </div>
           <div className="countdown-numbers">
-            <div className="cd-unit"><div className="cd-val">{pad(days)}</div><div className="cd-label">DAYS</div></div>
-            <div className="cd-sep">:</div>
+            {days > 0 && <>
+              <div className="cd-unit"><div className="cd-val">{pad(days)}</div><div className="cd-label">DAYS</div></div>
+              <div className="cd-sep">:</div>
+            </>}
             <div className="cd-unit"><div className="cd-val">{pad(hours)}</div><div className="cd-label">HRS</div></div>
             <div className="cd-sep">:</div>
             <div className="cd-unit"><div className="cd-val">{pad(minutes)}</div><div className="cd-label">MIN</div></div>
