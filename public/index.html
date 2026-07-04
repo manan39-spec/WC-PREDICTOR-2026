@@ -1191,12 +1191,20 @@ function App() {
     });
   }, [user]);
 
-  const updateState = useCallback(async (mutator) => {
-    const s = await getShared("wc26_state") || defaultState();
+const updateState = useCallback(async (mutator) => {
+    // SAFETY (hardened): never write a blank/default state over real data.
+    // If the current state can't be read (network hiccup), abort the save
+    // instead of saving a fresh defaultState() on top of everyone's results.
+    const s = await getShared("wc26_state");
+    if (!s) {
+      console.error("updateState aborted: could not read current state");
+      showToast("Network hiccup — not saved. Please try again.");
+      return;
+    }
     const updated = mutator({ ...s });
     await setShared("wc26_state", updated);
     setState(updated);
-  }, []);
+  }, [showToast]);
 
   if (loading) {
     return (
