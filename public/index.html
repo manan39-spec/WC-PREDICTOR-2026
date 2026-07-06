@@ -1192,18 +1192,42 @@ function App() {
   }, [user]);
 
 const updateState = useCallback(async (mutator) => {
-    // SAFETY (hardened): never write a blank/default state over real data.
-    // If the current state can't be read (network hiccup), abort the save
-    // instead of saving a fresh defaultState() on top of everyone's results.
-    const s = await getShared("wc26_state");
-    if (!s) {
-      console.error("updateState aborted: could not read current state");
-      showToast("Network hiccup — not saved. Please try again.");
+    // Always base the change on the AUTHORITATIVE server copy — never a stale
+    // local cache — so we can't overwrite newer data or write a blank. Then
+    // CONFIRM the write actually reached the server (with retries) and warn
+    // loudly if it didn't, so results can never silently vanish again.
+    let base = null;
+    if (apiReady) {
+      base = await remoteGet("wc26_state");
+      if (!base) {
+        console.error("updateState aborted: couldn't read live state from server");
+        showToast("⚠️ Couldn't reach the server — NOT saved. Try again in a moment.");
+        return;
+      }
+    } else {
+      base = parseStored(localStorage.getItem("wc26_state"));
+      if (!base) { showToast("⚠️ Offline and no local data — not saved."); return; }
+    }
+
+    const updated = mutator({ ...base });
+
+    try { localStorage.setItem("wc26_state", JSON.stringify(updated)); } catch {}
+    setState(updated);
+
+    if (!apiReady) {
+      showToast("⚠️ Offline — saved on this device only, NOT synced to everyone.");
       return;
     }
-    const updated = mutator({ ...s });
-    await setShared("wc26_state", updated);
-    setState(updated);
+
+    let ok = false;
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 500));
+      ok = await remoteSet("wc26_state", updated);
+    }
+    if (!ok) {
+      showToast("⚠️ NOT saved to the server after retries — re-enter it and check your connection.");
+      console.error("updateState: remote save failed after 3 attempts");
+    }
   }, [showToast]);
 
   if (loading) {
