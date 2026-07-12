@@ -3053,8 +3053,82 @@ function downloadPredictionsCSV(users, state, showToast) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+ setTimeout(() => URL.revokeObjectURL(url), 1000);
   if (showToast) showToast(`Downloaded ${sorted.length} players' predictions`);
+}
+
+// ---- Results export: the actual results you've entered (group winners, thirds,
+// R32 qualifiers, and every knockout match result). A rescue snapshot you can
+// re-enter from if the results ever get wiped. ----
+function downloadResultsCSV(state, showToast) {
+  const csvEscape = (val) => {
+    const s = (val == null ? "" : String(val));
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const r = state.results || {};
+  const rows = [["Category", "Round", "Match / Group", "Team 1", "Team 2", "Winner", "Score"]];
+  GROUP_LETTERS.forEach(L => {
+    const w = (r.groupWinners || {})[L];
+    if (w) rows.push(["Group Winner", "Group Stage", "Group " + L, "", "", w, ""]);
+  });
+  (r.thirdsAdvancing || []).forEach(t => rows.push(["Third Placed (advanced)", "Group Stage", "", "", "", t, ""]));
+  (r.r32Teams || []).forEach(t => rows.push(["R32 Qualifier", "Round of 32", "", "", "", t, ""]));
+  ["r32", "r16", "qf", "sf", "final"].forEach(round => {
+    const fixtures = (state.fixtures && state.fixtures[round]) || [];
+    const results = (r[round]) || {};
+    fixtures.forEach((f, idx) => {
+      const res = results[f.id] || {};
+      if (!res.winner && !res.score) return; // only matches with a result entered
+      const label = f.label || ("M" + (f.num || idx + 1));
+      rows.push(["Result", PHASE_LABELS[round], label, f.team1 || "", f.team2 || "", res.winner || "", res.score || ""]);
+    });
+  });
+  const csv = rows.map(row => row.map(csvEscape).join(",")).join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "panenka_results_" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (showToast) showToast("Downloaded current results");
+}
+
+// ---- Leaderboard export: current standings computed from picks + results.
+// Includes the main league (with per-round breakdown) and the separate Dark
+// Horse Cup. Great for sharing standings in the group chat. ----
+function downloadLeaderboardCSV(users, state, showToast) {
+  const csvEscape = (val) => {
+    const s = (val == null ? "" : String(val));
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const scored = (users || []).map(u => ({ name: u.name, ...calculateScore(u, state, users) }));
+  const main = [...scored].sort((a, b) => b.total - a.total);
+  const dh = [...scored].sort((a, b) => (b.darkHorseTotal || 0) - (a.darkHorseTotal || 0));
+  const rows = [];
+  rows.push(["MAIN LEAGUE"]);
+  rows.push(["Rank", "Player", "Group", "R32", "R16", "QF", "SF", "Final", "Bronze", "Bonus", "Total"]);
+  main.forEach((s, i) => {
+    const b = s.breakdown || {};
+    rows.push([i + 1, s.name, b.group || 0, b.r32 || 0, b.r16 || 0, b.qf || 0, b.sf || 0, b.final || 0, b.bronze || 0, b.bonus || 0, s.total || 0]);
+  });
+  rows.push([]);
+  rows.push(["DARK HORSE CUP (separate competition)"]);
+  rows.push(["Rank", "Player", "DH Points"]);
+  dh.forEach((s, i) => rows.push([i + 1, s.name, s.darkHorseTotal || 0]));
+  const csv = rows.map(row => row.map(csvEscape).join(",")).join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "panenka_standings_" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  if (showToast) showToast("Downloaded current standings");
 }
 
 // Restricted dashboard for the download-only login — backup export and nothing else.
@@ -3070,9 +3144,13 @@ function ExportOnlyDashboard({ users, state, showToast }) {
         </p>
       </div>
       <div className="card">
-        <div className="card-title">
-          <span>Predictions backup · {users.length} players</span>
-          <button className="btn btn-primary btn-sm" onClick={() => downloadPredictionsCSV(users, state, showToast)} disabled={users.length === 0}>⬇ Download all predictions (CSV)</button>
+       <div className="card-title">
+          <span>Backup & export · {users.length} players</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-primary btn-sm" onClick={() => downloadPredictionsCSV(users, state, showToast)} disabled={users.length === 0}>⬇ Picks (CSV)</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => downloadResultsCSV(state, showToast)}>⬇ Results (CSV)</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => downloadLeaderboardCSV(users, state, showToast)} disabled={users.length === 0}>⬇ Leaderboard (CSV)</button>
+          </div>
         </div>
         <div className="lock-banner" style={{ background: 'rgba(47,194,106,0.06)', borderColor: 'rgba(47,194,106,0.25)', color: 'var(--ink-dim)', marginBottom: 18 }}>
           💾 <span>Downloads every player's full predictions (group winners, thirds, dark horses, bonus answers, and any knockout picks) as a CSV that opens in Excel. Grab one before kickoff and after each lock so the data is always safe.</span>
