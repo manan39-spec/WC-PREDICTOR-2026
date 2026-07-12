@@ -543,6 +543,24 @@ async function remoteGet(key) {
   }
 }
 
+// Like remoteGet, but tells the caller WHY it got nothing: { ok:true, value }
+// when the server actually responded (value may be null = key genuinely empty),
+// or { ok:false } when the request failed (offline, non-200, rate-limited under
+// load, timeout). Lets refreshState avoid mistaking a busy-server failure for
+// "the league is empty" and stamping a blank state over everyone's results.
+async function remoteGetStatus(key) {
+  if (!apiReady) return { ok: false };
+  try {
+    const res = await fetch(`${API_STORE}?key=${encodeURIComponent(key)}`);
+    if (!res.ok) return { ok: false };
+    const data = await res.json();
+    return { ok: true, value: data.value ?? null };
+  } catch (error) {
+    console.warn('remoteGetStatus failed', error);
+    return { ok: false };
+  }
+}
+
 async function remoteSet(key, value) {
   if (!apiReady) return false;
   try {
@@ -1062,76 +1080,78 @@ function App() {
     setTimeout(() => setToast(null), 2400);
   }, []);
 
-  const refreshAll = useCallback(async () => {
-     let s = await getShared("wc26_state");
-    if (!s) {
-      // No state found. Only persist a fresh default when the remote store is
-      // actually reachable — otherwise we'd risk stamping a blank league over
-      // real data during an outage. Render from an in-memory default meanwhile.
-      s = defaultState();
-      if (apiReady) {
+  // Loads ONLY the shared league state (results, phase, locks, fixtures).
+  // Load-safe: only seeds/overwrites when the server POSITIVELY confirms the
+  // league is empty, and NEVER writes on a failed read (this is what closes the
+  // heavy-traffic wipe). This is what the 30s poll calls — one read, not ~23.
+  const refreshState = useCallback(async () => {
+    let s = null;
+    if (apiReady) {
+      const res = await remoteGetStatus("wc26_state");
+      if (res.ok && res.value) {
+        s = res.value;
+        try { localStorage.setItem("wc26_state", JSON.stringify(s)); } catch {}
+      } else if (res.ok && !res.value) {
+        // Server responded and the key is genuinely empty → brand-new league.
+        s = defaultState();
         await setShared("wc26_state", s);
+      } else {
+        // READ FAILED (load / rate-limit / network). Do NOT assume empty and do
+        // NOT write anything. Show last-known local copy, try again next poll.
+        const local = parseStored(localStorage.getItem("wc26_state"));
+        if (local) setState(local);
+        return;
       }
     } else {
-      let needsSave = false;
-      // SAFETY (hardened): never auto-wipe an existing league. A slow or partial
-      // Redis read used to trigger a full bracket reset here, clearing everyone's
-      // predictions and results. We now ONLY seed the bracket for a brand-new,
-      // completely empty league, and NEVER clear predictions or results.
-      const hasAnyResults = !!s.results && (
-        Object.keys(s.results.groupWinners || {}).length > 0 ||
-        (s.results.thirdsAdvancing || []).length > 0 ||
-        (s.results.r32Teams || []).length > 0 ||
-        ["r32","r16","qf","sf","final"].some(r => Object.keys((s.results[r]) || {}).length > 0)
-      );
-      const hasAnyFixtures = !!s.fixtures &&
-        ["r32","r16","qf","sf","final"].some(r => ((s.fixtures[r]) || []).length > 0);
-      if (!hasAnyFixtures && !hasAnyResults) {
-        // Fresh/empty league only — safe to seed the fixture structure.
-        s.fixtures = bracketTemplate();
-        if (!s.groups || Object.keys(s.groups).length === 0) s.groups = defaultGroups();
-        s.templateVersion = BRACKET_VERSION;
-        needsSave = true;
-      } else if (s.templateVersion !== BRACKET_VERSION) {
-        // Existing league: keep the version stamp current only. Do NOT touch
-        // fixtures, results, groups, or predictions.
-        s.templateVersion = BRACKET_VERSION;
-        needsSave = true;
-      }
-      // --- Non-destructive field migrations (don't touch predictions/results) ---
-      if (s.locks && s.locks.darkHorse === undefined) {
-        s.locks.darkHorse = false;
-        needsSave = true;
-      }
-      if (!s.scoring) { s.scoring = { ...DEFAULT_SCORING }; needsSave = true; }
-      if (!s.scoring.darkHorse) { s.scoring.darkHorse = { ...DEFAULT_SCORING.darkHorse }; needsSave = true; }
-      if (s.scoring && s.scoring.bronze === undefined) {
-        s.scoring.bronze = 8;
-        s.scoring.bronzeScore = 3;
-        needsSave = true;
-      }
-      if (s.results && s.results.r32Teams === undefined) {
-        s.results.r32Teams = [];
-        needsSave = true;
-      }
-      // One-time upgrade to escalating knockout weights + dark horse scoring
-      if (!s._patches?.scoring_v2) {
-        s.scoring = {
-          ...s.scoring,
-          r16: 3, r16Score: 3,
-          qf: 5, qfScore: 3,
-          sf: 7, sfScore: 3,
-          final: 10, finalScore: 5,
-          darkHorse: { r32: 1, r16: 3, qf: 5, sf: 8, final: 10 }
-        };
-        s._patches = { ...(s._patches || {}), scoring_v2: true };
-        needsSave = true;
-      }
-
-      if (needsSave) await setShared("wc26_state", s);
+      s = parseStored(localStorage.getItem("wc26_state")) || defaultState();
+      setState(s);
+      return;
     }
+
+    // Non-destructive migrations only; never clear fixtures/results/predictions.
+    let needsSave = false;
+    const hasAnyResults = !!s.results && (
+      Object.keys(s.results.groupWinners || {}).length > 0 ||
+      (s.results.thirdsAdvancing || []).length > 0 ||
+      (s.results.r32Teams || []).length > 0 ||
+      ["r32","r16","qf","sf","final"].some(r => Object.keys((s.results[r]) || {}).length > 0)
+    );
+    const hasAnyFixtures = !!s.fixtures &&
+      ["r32","r16","qf","sf","final"].some(r => ((s.fixtures[r]) || []).length > 0);
+    if (!hasAnyFixtures && !hasAnyResults) {
+      s.fixtures = bracketTemplate();
+      if (!s.groups || Object.keys(s.groups).length === 0) s.groups = defaultGroups();
+      s.templateVersion = BRACKET_VERSION;
+      needsSave = true;
+    } else if (s.templateVersion !== BRACKET_VERSION) {
+      s.templateVersion = BRACKET_VERSION;
+      needsSave = true;
+    }
+    if (s.locks && s.locks.darkHorse === undefined) { s.locks.darkHorse = false; needsSave = true; }
+    if (!s.scoring) { s.scoring = { ...DEFAULT_SCORING }; needsSave = true; }
+    if (!s.scoring.darkHorse) { s.scoring.darkHorse = { ...DEFAULT_SCORING.darkHorse }; needsSave = true; }
+    if (s.scoring && s.scoring.bronze === undefined) { s.scoring.bronze = 8; s.scoring.bronzeScore = 3; needsSave = true; }
+    if (s.results && s.results.r32Teams === undefined) { s.results.r32Teams = []; needsSave = true; }
+    if (!s._patches?.scoring_v2) {
+      s.scoring = {
+        ...s.scoring,
+        r16: 3, r16Score: 3,
+        qf: 5, qfScore: 3,
+        sf: 7, sfScore: 3,
+        final: 10, finalScore: 5,
+        darkHorse: { r32: 1, r16: 3, qf: 5, sf: 8, final: 10 }
+      };
+      s._patches = { ...(s._patches || {}), scoring_v2: true };
+      needsSave = true;
+    }
+
+    if (needsSave) await setShared("wc26_state", s);
     setState(s);
-    // Load all users' predictions
+  }, []);
+
+  // Loads every player's predictions (~22 reads). Only called when actually
+  // needed — initial load, manual refresh, admin actions — NOT on the poll.
+  const loadUsers = useCallback(async () => {
     const keys = await listShared("wc26_pred:");
     const all = [];
     for (const k of keys) {
@@ -1141,6 +1161,11 @@ function App() {
     setUsers(all);
   }, []);
 
+  // Full refresh = state + all predictions. Used on login, manual refresh, admin.
+  const refreshAll = useCallback(async () => {
+    await refreshState();
+    await loadUsers();
+  }, [refreshState, loadUsers]);
   useEffect(() => {
     (async () => {
       const savedUser = await getPersonal("current_user");
@@ -1152,11 +1177,12 @@ function App() {
     })();
   }, [refreshAll]);
 
-  useEffect(() => {
+useEffect(() => {
     if (!remoteAvailable) return;
-    const id = setInterval(() => refreshAll(), SYNC_POLL_MS);
+    // Poll only the shared state (1 read), not everyone's predictions (~22).
+    const id = setInterval(() => refreshState(), SYNC_POLL_MS);
     return () => clearInterval(id);
-  }, [remoteAvailable, refreshAll]);
+  }, [remoteAvailable, refreshState]);
 
   const login = useCallback(async (name) => {
     const cleanName = name.trim();
